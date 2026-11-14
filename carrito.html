@@ -44,6 +44,17 @@
         </div>
     </header>
 
+    <main class="container">
+        <section id="carrito" class="page-section active">
+            <h2 class="section-title">Carrito de Selección</h2>
+            <div id="cart-items"></div>
+            <div id="cart-summary" style="margin-top: 20px; text-align: right; display: none;">
+                <h3>Total: <span style="color: #27ae60;">Gratis ($0.00)</span></h3>
+                <button class="btn btn-primary" style="margin-top: 10px;" onclick="processFreeCheckout()">Confirmar y Descargar Selección</button>
+            </div>
+        </section>
+    </main>
+    
          <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>

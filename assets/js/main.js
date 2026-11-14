@@ -34,8 +34,18 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
             'admin': 'Administrador'
         };
 
-        window.onload = function() {
+       window.onload = function () {
             if (document.getElementById('inicio')) {
+                renderCatalog();
+                return;
+            }
+            if (document.getElementById('catalog-books')) {
+                const filtro = document.getElementById('category-filter');
+
+                categories.forEach(categoria => {
+                    filtro.add(new Option(categoria, categoria));
+                });
+
                 renderCatalog();
                 return;
             }

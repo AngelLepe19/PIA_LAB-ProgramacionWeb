@@ -44,6 +44,21 @@
         </div>
     </header>
 
+    <main class="container">
+        <section id="contacto" class="page-section active">
+            <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+                <h2 class="section-title">Formulario de Contacto</h2>
+                <form onsubmit="handleContactSubmit(event)" style="display: flex; flex-direction: column; gap: 10px; max-width: 500px;">
+                    <input type="text" id="cnt-name" placeholder="Tu Nombre" required style="padding: 8px;">
+                    <input type="email" id="cnt-email" placeholder="tu@correo.com" required style="padding: 8px;">
+                    <input type="text" id="cnt-subject" placeholder="Asunto" required style="padding: 8px;">
+                    <textarea id="cnt-message" placeholder="Escribe tu mensaje aquí..." rows="4" required style="padding: 8px;"></textarea>
+                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Enviar Mensaje</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
          <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>

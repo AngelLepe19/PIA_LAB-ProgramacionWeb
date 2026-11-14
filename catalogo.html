@@ -44,6 +44,18 @@
         </div>
     </header>
 
+    <main class="container">
+        <section id="catalogo" class="container page-section active">
+        <h2 class="section-title">Catálogo Completo</h2>
+        <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+            <select id="category-filter" class="form-group" style="width: 220px;" onchange="filterBooks()">
+                <option value="all">Todas las Categorías</option>
+            </select>
+        </div>
+        <div class="book-grid" id="catalog-books"></div>
+        </section>
+    </main>
+
          <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>

@@ -23,7 +23,7 @@
             <ul class="nav-links">
                 <li><a href="javascript:void(0)" id="link-inicio" onclick="window.location.href='index.html'">Inicio</a></li>
                 <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
-                <li><a href="javascript:void(0)" id="link-nosotros" class="active-link" class="active-link" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
+                <li><a href="javascript:void(0)" id="link-nosotros" class="active-link" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
                 <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
                 <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
                 <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
@@ -44,6 +44,15 @@
         </div>
     </header>
 
+    <main class="container">
+        <section id="nosotros" class="page-section active">
+            <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+                <h2 class="section-title">Sobre Nosotros</h2>
+                <p>Plataforma dedicada a la promoción de la lectura libre y gratuita. Permitimos a los autores compartir sus publicaciones directamente con la comunidad.</p>
+            </div>
+        </section>
+    </main>
+    
          <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
