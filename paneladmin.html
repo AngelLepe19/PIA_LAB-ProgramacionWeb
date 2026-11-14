@@ -23,7 +23,7 @@
             <ul class="nav-links">
                 <li><a href="javascript:void(0)" id="link-inicio" onclick="window.location.href='index.html'">Inicio</a></li>
                 <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
-                <li><a href="javascript:void(0)" id="link-nosotros" class="active-link" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
+                <li><a href="javascript:void(0)" id="link-nosotros" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
                 <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
                 <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
                 <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
@@ -44,7 +44,106 @@
         </div>
     </header>
 
-         <div class="modal-overlay" id="authModal">
+    <main class="container">
+        <section id="admin-dashboard" class="page-section active">
+            <h2 class="section-title">Panel de Administración Global</h2>
+            <div class="tab-menu">
+                <button class="tab-btn active" onclick="switchAdminTab('adm-reportes',this)">Reportes</button>
+                <button class="tab-btn" onclick="switchAdminTab('adm-libros',this)">Libros / Inventario</button>
+                <button class="tab-btn" onclick="switchAdminTab('adm-cats',this)">Categorías</button>
+                <button class="tab-btn" onclick="switchAdminTab('adm-usuarios',this)">Usuarios / Roles</button>
+                <button class="tab-btn" onclick="switchAdminTab('adm-resenas',this)">Moderación Reseñas</button>
+            </div>
+
+            <!-- TAB REPORTES (ADMIN) -->
+            <div id="adm-reportes" class="admin-tab">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3>Reporte de Descargas y Plataforma</h3>
+                    <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimir Reporte</button>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card"><h3 id="stat-total-downloads">0</h3><p>Descargas Totales Generales</p></div>
+                    <div class="stat-card"><h3 id="stat-total-books">0</h3><p>Libros Registrados</p></div>
+                    <div class="stat-card"><h3 id="stat-total-categories">0</h3><p>Categorías Activas</p></div>
+                    <div class="stat-card"><h3 id="stat-total-users">0</h3><p>Usuarios Registrados</p></div>
+                </div>
+
+                <h3 style="margin-top: 25px;">Descargas Totales por Categoría</h3>
+                <table class="wf-table" style="margin-bottom: 30px;">
+                    <thead>
+                        <tr>
+                            <th>Categoría</th>
+                            <th>Total Libros</th>
+                            <th>Total Descargas</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-category-reports-table"></tbody>
+                </table>
+
+                <h3>Libros Más Descargados / Leídos</h3>
+                <table class="wf-table">
+                    <thead><tr><th>Título</th><th>Autor</th><th>Categoría</th><th>Descargas / Lecturas</th><th>Valoración</th></tr></thead>
+                    <tbody id="admin-reports-table"></tbody>
+                </table>
+            </div>
+
+            <!-- TAB LIBROS -->
+            <div id="adm-libros" class="admin-tab" style="display: none;">
+                <button class="btn btn-primary" onclick="openBookModal()"><i class="fa-solid fa-plus"></i> Agregar Libro</button>
+                <table class="wf-table">
+                    <thead><tr><th>ID</th><th>Título</th><th>Autor</th><th>Categoría</th><th>Descargas</th><th>Acciones</th></tr></thead>
+                    <tbody id="admin-books-table"></tbody>
+                </table>
+            </div>
+
+            <!-- TAB CATEGORÍAS -->
+            <div id="adm-cats" class="admin-tab" style="display: none;">
+                <form onsubmit="addCategory(event)" style="display: flex; gap: 10px; max-width: 400px; margin-bottom: 15px;">
+                    <input type="text" id="new-cat-input" placeholder="Nueva categoría..." required style="padding: 8px;">
+                    <button type="submit" class="btn btn-primary">Añadir</button>
+                </form>
+                <table class="wf-table" style="max-width: 500px;">
+                    <thead><tr><th>Categoría</th><th>Acción</th></tr></thead>
+                    <tbody id="admin-cats-table"></tbody>
+                </table>
+            </div>
+
+            <!-- TAB USUARIOS -->
+            <div id="adm-usuarios" class="admin-tab" style="display: none;">
+                <table class="wf-table">
+                    <thead><tr><th>Nombre</th><th>Email</th><th>Rol Actual</th><th>Acción</th></tr></thead>
+                    <tbody id="admin-users-table"></tbody>
+                </table>
+            </div>
+
+            <!-- TAB MODERACIÓN DE RESEÑAS -->
+            <div id="adm-resenas" class="admin-tab" style="display: none;">
+                <table class="wf-table">
+                    <thead><tr><th>Libro</th><th>Usuario</th><th>Comentario</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody id="admin-reviews-table"></tbody>
+                </table>
+            </div>
+        </section>
+
+            <!-- MODAL LIBRO (CREAR/EDITAR POR ADMIN O AUTOR) -->
+            <div class="modal-overlay" id="bookModal">
+                <div class="modal">
+                    <span class="close-modal" onclick="closeBookModal()">&times;</span>
+                    <h3 id="book-modal-title">Agregar Libro</h3>
+                    <form onsubmit="saveBook(event)">
+                        <input type="hidden" id="book-id">
+                        <div class="form-group"><label>Título</label><input type="text" id="bm-title" required></div>
+                        <div class="form-group"><label>Autor</label><input type="text" id="bm-author" required></div>
+                        <div class="form-group"><label>Categoría</label><select id="bm-category"></select></div>
+                        <div class="form-group"><label>Sinopsis</label><textarea id="bm-synopsis" rows="3"></textarea></div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Libro</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+    <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
             

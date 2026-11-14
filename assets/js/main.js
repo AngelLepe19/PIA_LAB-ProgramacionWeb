@@ -436,9 +436,11 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
             });
         }
 
-        function switchAdminTab(tab) {
+        function switchAdminTab(tab, boton) {
             document.querySelectorAll('.admin-tab').forEach(t => t.style.display = 'none');
             document.getElementById(tab).style.display = 'block';
+            document.querySelector('.tab-menu .tab-btn.active')?.classList.remove('active');
+            boton.classList.add('active');
         }
 
         function renderAdminAll() {

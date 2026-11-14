@@ -44,6 +44,26 @@
         </div>
     </header>
 
+        <main class="container">
+                <section id="worker-dashboard" class="page-section active">
+                <h2 class="section-title">Panel Trabajador - Mensajes de Contacto</h2>
+                <p style="margin-bottom: 15px; color: var(--wf-gray);">Atención e interacciones recibidas desde el formulario público de Contacto.</p>
+                <table class="wf-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Remitente</th>
+                            <th>Email</th>
+                            <th>Asunto</th>
+                            <th>Mensaje</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="worker-messages-table"></tbody>
+                </table>
+        </main>
+
          <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
