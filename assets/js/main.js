@@ -57,11 +57,7 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
         };
 
         function navigateTo(sectionId) {
-            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active-link'));
-            
-            const sec = document.getElementById(sectionId);
-            if (sec) sec.classList.add('active');
             
             const link = document.getElementById('link-' + sectionId);
             if (link) link.classList.add('active-link');

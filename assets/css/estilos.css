@@ -29,8 +29,6 @@
         .btn-danger { border-color: #e74c3c; color: #e74c3c; }
         .btn-danger:hover { background: #e74c3c; color: white; }
 
-        .page-section { display: none; }
-        .page-section.active { display: block; }
 
         header { position: sticky; top: 0; background-color: var(--wf-white); border-bottom: 2px solid var(--wf-light-gray); z-index: 1000; }
         .navbar { display: flex; align-items: center; justify-content: space-between; padding: 15px 0; gap: 15px; }
