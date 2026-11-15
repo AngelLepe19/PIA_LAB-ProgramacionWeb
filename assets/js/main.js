@@ -352,6 +352,14 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
 
         function handleSignUp(e) {
             e.preventDefault();
+            const password = document.getElementById('signup-password');
+            const confirmation = document.getElementById('signup-password-confirm');
+            if (password.value !== confirmation.value) {
+                alert('Las contraseñas no coinciden.');
+                confirmation.focus();
+                return;
+            }
+
             const name = document.getElementById('signup-name').value;
             const email = document.getElementById('signup-email').value;
             const role = document.getElementById('signup-role').value;
