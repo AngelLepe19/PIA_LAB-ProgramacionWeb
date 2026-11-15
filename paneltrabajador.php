@@ -2,6 +2,11 @@
 session_start();
 require_once 'config/conexion.php';
 
+if (!isset($_SESSION['id_usuario']) || !in_array((int)$_SESSION['id_rol'], [3, 4], true)) {
+    header("Location: index.php?error=acceso_denegado");
+    exit;
+}
+
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;

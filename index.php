@@ -39,6 +39,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         case 'campos_vacios':
             $alerta_texto = 'Por favor completa todos los campos obligatorios.';
             break;
+        case 'acceso_denegado':
+            $alerta_texto = 'No tienes permisos para acceder a esa sección.';
+            break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
             break;
