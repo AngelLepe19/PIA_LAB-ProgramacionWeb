@@ -659,3 +659,34 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
                 `;
             });
         }
+        function validarRegistro(e) {
+            const password = document.getElementById('signup-password');
+            const confirmation = document.getElementById('signup-password-confirm');
+            if (password.value !== confirmation.value) {
+                e.preventDefault();
+                alert('Las contraseñas no coinciden.');
+                confirmation.focus();
+                return false;
+            }
+            return true;
+        }
+        
+        window.onload = function () {
+            if (document.getElementById('catalog-books')) {
+                const filtro = document.getElementById('category-filter');
+                categories.forEach(categoria => {
+                    filtro.add(new Option(categoria, categoria));
+                });
+                renderCatalog();
+                return;
+            }
+
+            if (document.getElementById('admin-books-table')) {
+                renderCategories();
+                renderCatalog();
+                renderAdminAll();
+            }
+            if (document.getElementById('worker-messages-table')) {
+                renderWorkerMessages();
+            }
+        };
