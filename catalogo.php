@@ -44,6 +44,76 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             break;
     }
 }
+// ---- Catálogo: filtros que llegan por la URL ----
+$q = trim($_GET['q'] ?? '');                      // texto a buscar
+$id_categoria = (int)($_GET['categoria'] ?? 0);   // 0 = todas
+$orden = $_GET['orden'] ?? 'recientes';
+
+// Ordenes permitidos (no se mete texto del usuario al SQL)
+$ordenes = [
+    'recientes'  => 'l.fecha_alta DESC',
+    'populares'  => 'l.lecturas_acumuladas DESC',
+    'valoracion' => 'promedio DESC',
+    'titulo'     => 'l.titulo ASC',
+];
+if (!isset($ordenes[$orden])) {
+    $orden = 'recientes';
+}
+
+// Categorías para el select
+$categorias = $conn->query("SELECT id_categoria, nombre FROM categorias ORDER BY nombre")->fetch_all(MYSQLI_ASSOC);
+
+// Libros aprobados con autor, categorías y promedio de reseñas aprobadas
+$sql = "SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor,
+               (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
+                  FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
+                 WHERE lc.id_libro = l.id_libro) AS categorias,
+               (SELECT ROUND(AVG(r.puntuacion), 1) FROM resenas r
+                 WHERE r.id_libro = l.id_libro AND r.estado = 'aprobada') AS promedio
+        FROM libros l
+        INNER JOIN autores a ON l.id_autor = a.id_autor
+        WHERE l.estado = 'aprobado'";
+$tipos = '';
+$params = [];
+
+// Buscar por título, autor o categoría
+if ($q !== '') {
+    $sql .= " AND (l.titulo LIKE ? OR a.nombre_artistico LIKE ?
+              OR EXISTS (SELECT 1 FROM libro_categoria lc2
+                         JOIN categorias c2 ON c2.id_categoria = lc2.id_categoria
+                         WHERE lc2.id_libro = l.id_libro AND c2.nombre LIKE ?))";
+    $like = "%$q%";
+    $tipos .= 'sss';
+    array_push($params, $like, $like, $like);
+}
+
+// Filtrar por categoría
+if ($id_categoria > 0) {
+    $sql .= " AND EXISTS (SELECT 1 FROM libro_categoria lc3
+                          WHERE lc3.id_libro = l.id_libro AND lc3.id_categoria = ?)";
+    $tipos .= 'i';
+    $params[] = $id_categoria;
+}
+
+$sql .= " ORDER BY " . $ordenes[$orden];
+
+$stmt = $conn->prepare($sql);
+if ($tipos !== '') {
+    $stmt->bind_param($tipos, ...$params);
+}
+$stmt->execute();
+$libros = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Favoritos del usuario para pintar el corazón
+$mis_favoritos = [];
+if ($logueado) {
+    $stmt_fav = $conn->prepare("SELECT id_libro FROM favoritos WHERE id_usuario = ?");
+    $stmt_fav->bind_param("i", $_SESSION['id_usuario']);
+    $stmt_fav->execute();
+    $mis_favoritos = array_map('intval', array_column($stmt_fav->get_result()->fetch_all(MYSQLI_ASSOC), 'id_libro'));
+    $stmt_fav->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -119,16 +189,67 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     <?php endif; ?>
 
     <main class="container">
-        <section id="catalogo" class="container">
+    <section id="catalogo">
         <h2 class="section-title">Catálogo Completo</h2>
-        <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-            <select id="category-filter" class="form-group" style="width: 220px;" onchange="filterBooks()">
-                <option value="all">Todas las Categorías</option>
+
+        <!-- Filtros (se mandan por GET) -->
+        <form method="GET" action="catalogo.php" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Título, autor o categoría" style="padding: 8px;">
+            <select name="categoria" style="padding: 8px;">
+                <option value="0">Todas las categorías</option>
+                <?php foreach ($categorias as $cat): ?>
+                    <option value="<?= (int)$cat['id_categoria'] ?>" <?= $id_categoria === (int)$cat['id_categoria'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($cat['nombre']) ?>
+                    </option>
+                <?php endforeach; ?>
             </select>
+            <select name="orden" style="padding: 8px;">
+                <option value="recientes" <?= $orden === 'recientes' ? 'selected' : '' ?>>Más recientes</option>
+                <option value="populares" <?= $orden === 'populares' ? 'selected' : '' ?>>Más leídos</option>
+                <option value="valoracion" <?= $orden === 'valoracion' ? 'selected' : '' ?>>Mejor valorados</option>
+                <option value="titulo" <?= $orden === 'titulo' ? 'selected' : '' ?>>Título (A-Z)</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+            <a href="catalogo.php" class="btn">Limpiar</a>
+        </form>
+
+        <p style="color: var(--wf-gray); margin-bottom: 10px;"><?= count($libros) ?> libro(s) encontrado(s)</p>
+
+        <!-- id distinto a "catalog-books" para que main.js no lo sobrescriba -->
+        <div class="book-grid" id="catalogo-libros">
+            <?php foreach ($libros as $libro): ?>
+                <?php
+                $id_lib = (int)$libro['id_libro'];
+                $es_fav = in_array($id_lib, $mis_favoritos, true);
+                $rating = $libro['promedio'] !== null ? $libro['promedio'] : 'Nuevo';
+                $precio = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
+                ?>
+                <div class="book-card">
+                    <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Favorito" style="color: inherit;">
+                        <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
+                    </a>
+                    <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                    <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor: pointer;">
+                        <?= htmlspecialchars($libro['titulo']) ?>
+                    </h4>
+                    <p style="font-size: 0.8rem; color: var(--wf-gray);"><?= htmlspecialchars($libro['autor']) ?></p>
+                    <p style="font-size: 0.75rem; color: var(--wf-gray);"><?= htmlspecialchars($libro['categorias'] ?? '') ?></p>
+                    <div class="stars">⭐ <?= htmlspecialchars($rating) ?></div>
+                    <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
+                        <strong style="color: #27ae60;"><?= $precio ?></strong>
+                        <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                        </a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+
+            <?php if (count($libros) === 0): ?>
+                <p>No se encontraron libros con esos filtros.</p>
+            <?php endif; ?>
         </div>
-        <div class="book-grid" id="catalog-books"></div>
-        </section>
-    </main>
+    </section>
+</main>
 
     <div class="modal-overlay" id="authModal">
         <div class="modal">
