@@ -1,3 +1,50 @@
+<?php
+session_start();
+require_once 'config/conexion.php';
+
+$pagina_actual = basename($_SERVER['PHP_SELF']);
+$logueado = isset($_SESSION['id_usuario']);
+$id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
+$nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
+
+// Contar libros en el carrito real del usuario
+$cart_count = 0;
+if ($logueado) {
+    $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
+    $stmt_cart->bind_param("i", $_SESSION['id_usuario']);
+    $stmt_cart->execute();
+    $res_cart = $stmt_cart->get_result()->fetch_assoc();
+    $cart_count = (int)($res_cart['total'] ?? 0);
+    $stmt_cart->close();
+}
+
+// Mensajes de aviso tras login o registro
+$alerta_texto = '';
+$alerta_tipo = '';
+if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
+    $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
+    $alerta_tipo = 'exito';
+} elseif (isset($_GET['error'])) {
+    $alerta_tipo = 'error';
+    switch ($_GET['error']) {
+        case 'credenciales_invalidas':
+            $alerta_texto = 'Correo o contraseña incorrectos.';
+            break;
+        case 'correo_existente':
+            $alerta_texto = 'Ese correo electrónico ya está registrado.';
+            break;
+        case 'cuenta_inactiva':
+            $alerta_texto = 'Tu cuenta está pendiente o inactiva. Contacta al administrador.';
+            break;
+        case 'campos_vacios':
+            $alerta_texto = 'Por favor completa todos los campos obligatorios.';
+            break;
+        default:
+            $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
+            break;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -11,7 +58,7 @@
 
     <header>
         <div class="container navbar">
-            <a href="javascript:void(0)" class="logo" onclick="window.location.href='index.html'">
+            <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
@@ -21,44 +68,75 @@
             </div>
 
             <ul class="nav-links">
-                <li><a href="javascript:void(0)" id="link-inicio" class="active-link" onclick="window.location.href='index.html'">Inicio</a></li>
-                <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
-                <li><a href="javascript:void(0)" id="link-nosotros" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
-                <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
-                <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
-                <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
-                <li id="admin-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-admin-dashboard" onclick="window.location.href='paneladmin.html'">Panel Admin</a></li>
+                <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
+                <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
+                <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
+                <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
+
+                <?php if ($id_rol === 2 || $id_rol === 4): ?>
+                    <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
+                <?php endif; ?>
+
+                <?php if ($id_rol === 3 || $id_rol === 4): ?>
+                    <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
+                <?php endif; ?>
+
+                <?php if ($id_rol === 4): ?>
+                    <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
+                <?php endif; ?>
             </ul>
 
             <div class="user-actions">
-                <button class="btn" onclick="window.location.href='carrito.html'"><i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge">0</span></button>
-                <div id="auth-buttons">
-                    <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
-                    <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
-                </div>
-                <div id="user-menu" style="display: none; gap: 10px; align-items: center;">
-                    <button class="btn" onclick="window.location.href='perfil.html'"><i class="fa-solid fa-circle-user"></i> <span id="user-display-name">Usuario</span></button>
-                    <button class="btn btn-danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
-                </div>
+                <button class="btn" onclick="window.location.href='carrito.php'">
+                    <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
+                </button>
+
+                <?php if (!$logueado): ?>
+                    <div id="auth-buttons">
+                        <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
+                        <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
+                    </div>
+                <?php else: ?>
+                    <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn" onclick="window.location.href='perfil.php'">
+                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                        </button>
+                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </header>
 
-    <main class="container">
-        <section id="inicio">
-            <div class="hero">
-                <div class="hero-content">
-                    <div>
-                        <h1>Lectura Libre y Digital</h1>
-                        <p>Explora y descarga libros electrónicos de manera 100% gratuita.</p>
-                        <button class="btn btn-primary" style="margin-top: 15px;" onclick="window.location.href='catalogo.html'">Explorar Catálogo</button>
-                    </div>
-                    <div class="placeholder-box" style="width: 250px; height: 150px;">BIBLIOTECA LIBRE</div>
-                </div>
+    <?php if ($alerta_texto !== ''): ?>
+        <div class="container" style="margin-top: 15px;">
+            <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
+                <?= htmlspecialchars($alerta_texto) ?>
             </div>
-            <h2 class="section-title">Novedades y Destacados</h2>
-            <div class="book-grid" id="featured-books"></div>
-        </section>
+        </div>
+    <?php endif; ?>
+
+        <main class="container">
+                <section id="worker-dashboard">
+                <h2 class="section-title">Panel Trabajador - Mensajes de Contacto</h2>
+                <p style="margin-bottom: 15px; color: var(--wf-gray);">Atención e interacciones recibidas desde el formulario público de Contacto.</p>
+                <table class="wf-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Remitente</th>
+                            <th>Email</th>
+                            <th>Asunto</th>
+                            <th>Mensaje</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="worker-messages-table"></tbody>
+                </table>
+        </main>
 
          <div class="modal-overlay" id="authModal">
         <div class="modal">
