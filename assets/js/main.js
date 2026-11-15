@@ -414,6 +414,9 @@ let categories = ["Ficción", "Ciencia", "Historia", "Tecnología", "Novela"];
         function switchProfileTab(tab) {
             document.querySelectorAll('.profile-tab').forEach(t => t.style.display = 'none');
             document.getElementById('tab-' + tab).style.display = 'block';
+            document.querySelectorAll('#perfil [data-profile-tab]').forEach(boton => {
+                boton.classList.toggle('active', boton.dataset.profileTab === tab);
+            });
         }
 
         function saveProfile(e) {
