@@ -1,0 +1,10 @@
+# Archivos subidos por los usuarios (PDF y portadas): no se versionan
+uploads/pdf/*
+uploads/portadas/*
+!uploads/pdf/.gitkeep
+!uploads/portadas/.gitkeep
+
+# Editor / sistema
+.vscode/
+.DS_Store
+Thumbs.db
