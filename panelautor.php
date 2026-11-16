@@ -220,6 +220,21 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         </div>
     </div>
 
+    <div class="modal-overlay" id="bookModal">
+            <div class="modal">
+                <span class="close-modal" onclick="closeBookModal()">&times;</span>
+                <h3 id="book-modal-title">Agregar Libro</h3>
+                <form onsubmit="saveBook(event)">
+                    <input type="hidden" id="book-id">
+                    <div class="form-group"><label>Título</label><input type="text" id="bm-title" required></div>
+                    <div class="form-group"><label>Autor</label><input type="text" id="bm-author" required></div>
+                    <div class="form-group"><label>Categoría</label><select id="bm-category"></select></div>
+                    <div class="form-group"><label>Sinopsis</label><textarea id="bm-synopsis" rows="3"></textarea></div>
+                  G  <button type="submit" class="btn btn-primary" style="width: 100%;">Guardar Libro</button>
+                </form>
+            </div>
+        </div>
+
     <footer>
     <div class="container footer-cols">
         <div>
