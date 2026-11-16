@@ -23,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (password_verify($password, $usuario['contrasena_hash'])) {
+            session_regenerate_id(true);
+
             $_SESSION['id_usuario'] = $usuario['id_usuario'];
             $_SESSION['nombre_completo'] = $usuario['nombre_completo'];
             $_SESSION['correo'] = $usuario['correo'];
@@ -43,3 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header("Location: ../index.php?error=credenciales_invalidas");
     exit;
 }
+
+header("Location: ../index.php");
+exit;
