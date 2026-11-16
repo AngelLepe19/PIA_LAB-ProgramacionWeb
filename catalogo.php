@@ -39,18 +39,62 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         case 'campos_vacios':
             $alerta_texto = 'Por favor completa todos los campos obligatorios.';
             break;
+        case 'inicia_sesion':
+            $alerta_texto = 'Inicia sesión para guardar favoritos o agregar libros al carrito.';
+            break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
             break;
     }
 }
+
+// Obtener IDs de favoritos del usuario actual
+$mis_favoritos = [];
+if ($logueado) {
+    $stmt_fav = $conn->prepare("SELECT id_libro FROM favoritos WHERE id_usuario = ?");
+    $stmt_fav->bind_param("i", $_SESSION['id_usuario']);
+    $stmt_fav->execute();
+    $res_fav = $stmt_fav->get_result();
+    while ($f = $res_fav->fetch_assoc()) {
+        $mis_favoritos[] = (int)$f['id_libro'];
+    }
+    $stmt_fav->close();
+}
+
+// Obtener categorías reales desde MySQL
+$categorias_lista = [];
+$res_cats = $conn->query("SELECT id_categoria, nombre FROM categorias ORDER BY nombre ASC");
+if ($res_cats) {
+    while ($cat = $res_cats->fetch_assoc()) {
+        $categorias_lista[] = $cat;
+    }
+}
+
+// Consultar todos los libros aprobados desde MySQL con sus categorías y calificación promedio
+$sql_libros = "
+    SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor,
+           ROUND(AVG(CASE WHEN r.estado = 'aprobada' THEN r.puntuacion END), 1) AS promedio,
+           GROUP_CONCAT(DISTINCT c.nombre ORDER BY c.nombre SEPARATOR ', ') AS categorias
+    FROM libros l
+    INNER JOIN autores a ON l.id_autor = a.id_autor
+    LEFT JOIN resenas r ON l.id_libro = r.id_libro
+    LEFT JOIN libro_categoria lc ON l.id_libro = lc.id_libro
+    LEFT JOIN categorias c ON lc.id_categoria = c.id_categoria
+    WHERE l.estado = 'aprobado'
+    GROUP BY l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico
+    ORDER BY l.fecha_alta DESC
+";
+$res_libros = $conn->query($sql_libros);
+
+// Búsqueda opcional si viene ?q= desde otra página
+$busqueda_inicial = trim($_GET['q'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LecturaLibre - Plataforma Gratuita</title>
+    <title>Catálogo - LecturaLibre</title>
     <link rel="stylesheet" href="assets/css/estilos.css">
     <script src="assets/js/main.js"></script>
 </head>
@@ -64,7 +108,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
 
             <div class="search-bar">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="global-search" placeholder="Buscar título, autor o categoría..." onkeyup="filterBooks()">
+                <input type="text" id="global-search" value="<?= htmlspecialchars($busqueda_inicial) ?>" placeholder="Buscar título, autor o categoría..." onkeyup="filtrarCatalogo()">
             </div>
 
             <ul class="nav-links">
@@ -119,14 +163,80 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     <?php endif; ?>
 
     <main class="container">
-        <section id="catalogo" class="container">
-        <h2 class="section-title">Catálogo Completo</h2>
-        <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-            <select id="category-filter" class="form-group" style="width: 220px;" onchange="filterBooks()">
-                <option value="all">Todas las Categorías</option>
-            </select>
-        </div>
-        <div class="book-grid" id="catalog-books"></div>
+        <section id="catalogo">
+            <h2 class="section-title">Catálogo Completo</h2>
+            <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <select id="category-filter" class="form-group" style="width: 220px; padding: 8px; border-radius: var(--radius); border: 1px solid var(--wf-border);" onchange="filtrarCatalogo()">
+                    <option value="all">Todas las Categorías</option>
+                    <?php foreach ($categorias_lista as $cat): ?>
+                        <option value="<?= htmlspecialchars(mb_strtolower($cat['nombre'])) ?>">
+                            <?= htmlspecialchars($cat['nombre']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="book-grid" id="catalog-books-mysql">
+                <?php if ($res_libros && $res_libros->num_rows > 0): ?>
+                    <?php while ($libro = $res_libros->fetch_assoc()): ?>
+                        <?php
+                        $id_lib = (int)$libro['id_libro'];
+                        $es_fav = in_array($id_lib, $mis_favoritos, true);
+                        $rating_texto = $libro['promedio'] !== null ? $libro['promedio'] : 'Nuevo';
+                        $precio_texto = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
+                        $cats_libro = $libro['categorias'] ?? '';
+                        $portada_ruta = trim((string)($libro['portada'] ?? ''));
+                        ?>
+                        <div class="book-card"
+                             data-titulo="<?= htmlspecialchars(mb_strtolower($libro['titulo'])) ?>"
+                             data-autor="<?= htmlspecialchars(mb_strtolower($libro['autor'])) ?>"
+                             data-categorias="<?= htmlspecialchars(mb_strtolower($cats_libro)) ?>">
+
+                            <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Favorito" style="color: inherit;">
+                                <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
+                            </a>
+
+                            <?php if ($portada_ruta !== '' && file_exists($portada_ruta)): ?>
+                                <img src="<?= htmlspecialchars($portada_ruta) ?>"
+                                     alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>"
+                                     class="book-card-img"
+                                     style="object-fit: cover; border-radius: var(--radius); cursor: pointer;"
+                                     onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
+                            <?php else: ?>
+                                <div class="placeholder-box book-card-img" style="cursor: pointer;" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
+                                    PORTADA
+                                </div>
+                            <?php endif; ?>
+
+                            <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor:pointer;">
+                                <?= htmlspecialchars($libro['titulo']) ?>
+                            </h4>
+                            <p style="font-size:0.8rem; color: var(--wf-gray);">
+                                <?= htmlspecialchars($libro['autor']) ?>
+                            </p>
+                            <?php if ($cats_libro !== ''): ?>
+                                <p style="font-size:0.75rem; color: var(--wf-accent); margin-top: 2px;">
+                                    <?= htmlspecialchars($cats_libro) ?>
+                                </p>
+                            <?php endif; ?>
+                            <div class="stars">⭐⭐⭐⭐⭐ (<?= htmlspecialchars($rating_texto) ?>)</div>
+
+                            <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:center;">
+                                <strong style="color: #27ae60;"><?= $precio_texto ?></strong>
+                                <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
+                                    <i class="fa-solid fa-cart-shopping"></i>
+                                </a>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <p>No hay libros disponibles en el catálogo por el momento.</p>
+                <?php endif; ?>
+            </div>
+
+            <p id="no-results-msg" style="display: none; color: var(--wf-gray); margin-top: 10px;">
+                No se encontraron libros que coincidan con tu búsqueda.
+            </p>
         </section>
     </main>
 
@@ -171,12 +281,12 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
+            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
                     <label>Correo Electrónico</label>
-                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
+                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
                 <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
@@ -204,5 +314,38 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             </nav>
         </div>
     </footer>
+
+    <script>
+        function filtrarCatalogo() {
+            const texto = document.getElementById('global-search').value.toLowerCase().trim();
+            const categoria = document.getElementById('category-filter').value;
+            const tarjetas = document.querySelectorAll('#catalog-books-mysql .book-card');
+            let visibles = 0;
+
+            tarjetas.forEach(card => {
+                const titulo = card.dataset.titulo || '';
+                const autor = card.dataset.autor || '';
+                const cats = card.dataset.categorias || '';
+
+                const coincideTexto = texto === '' || titulo.includes(texto) || autor.includes(texto) || cats.includes(texto);
+                const listaCats = cats.split(',').map(c => c.trim());
+                const coincideCat = categoria === 'all' || listaCats.includes(categoria);
+
+                if (coincideTexto && coincideCat) {
+                    card.style.display = 'flex';
+                    visibles++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            const msgVacio = document.getElementById('no-results-msg');
+            if (msgVacio) {
+                msgVacio.style.display = (tarjetas.length > 0 && visibles === 0) ? 'block' : 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', filtrarCatalogo);
+    </script>
 </body>
 </html>
