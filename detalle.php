@@ -24,8 +24,10 @@ $alerta_tipo = '';
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
     $alerta_tipo = 'exito';
-} elseif (isset($_GET['error'])) {
-    $alerta_tipo = 'error';
+} elseif (isset($_GET['resena']) && $_GET['resena'] === 'enviada') {
+    $alerta_texto = 'Tu reseña se envió y está pendiente de aprobación.';
+    $alerta_tipo = 'exito';
+} elseif (isset($_GET['error'])) {    $alerta_tipo = 'error';
     switch ($_GET['error']) {
         case 'credenciales_invalidas':
             $alerta_texto = 'Correo o contraseña incorrectos.';
@@ -38,6 +40,12 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             break;
         case 'campos_vacios':
             $alerta_texto = 'Por favor completa todos los campos obligatorios.';
+            break;
+        case 'resena_invalida':
+            $alerta_texto = 'La reseña necesita calificación de 1 a 5 y un comentario de máximo 500 caracteres.';
+            break;
+        case 'resena_duplicada':
+            $alerta_texto = 'Ya escribiste una reseña para este libro.';
             break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
