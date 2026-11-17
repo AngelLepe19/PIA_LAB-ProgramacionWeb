@@ -9,27 +9,43 @@ $hdrTabs = [
     'resenas'    => ['Moderación Reseñas',  'resenas.php',    ['Administrador', 'Trabajador']],
     'mensajes'   => ['Mensajes',            'mensajes.php',   ['Administrador', 'Trabajador']],
 ];
-?><!doctype html>
+?>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($titulo ?? 'Panel') ?> · LecturaLibre</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="assets/admin.css" rel="stylesheet">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><?= e($titulo) ?> · LecturaLibre</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="assets/admin.css" rel="stylesheet">
 </head>
 <body>
-<nav class="navbar navbar-expand-lg bg-white border-bottom no-print">
-    <div class="container">
-        <a class="navbar-brand fw-bold" href="../index.php"><span class="brand-mark">▮▮</span> LecturaLibre</a>
-        <?php if ($hdrUser): ?>
-            <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-light text-dark border"><?= e($hdrUser['nombre'] ?? 'Usuario') ?> · <?= e($hdrUser['rol']) ?></span>
-                <a class="btn btn-sm btn-outline-danger" href="logout.php">Cerrar sesión</a>
-            </div>
-        <?php endif; ?>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 no-print">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="../index.php">LecturaLibre</a>
+    <div class="ms-auto d-flex align-items-center gap-2 text-white">
+      <a href="../index.php" class="btn btn-sm btn-outline-light">Volver al sitio</a>
+      <?php if ($hdrUser): ?>
+        <span class="small"><?= e($hdrUser['nombre']) ?> · <strong><?= e($hdrUser['rol']) ?></strong></span>
+        <a href="../auth/logout.php" class="btn btn-sm btn-outline-danger">Cerrar sesión</a>
+      <?php endif; ?>
     </div>
+  </div>
 </nav>
+<main class="container mb-5">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0"><?= e($titulo) ?></h1>
+  </div>
+  <?php if ($hdrUser): ?>
+  <ul class="nav nav-tabs mb-4 no-print">
+    <?php foreach ($hdrTabs as $k => [$lbl, $href, $roles]):
+      if (!es_rol($hdrUser, $roles)) continue; ?>
+      <li class="nav-item">
+        <a class="nav-link <?= ($tab ?? '') === $k ? 'active' : '' ?>" href="<?= $href ?>"><?= e($lbl) ?></a>
+      </li>
+    <?php endforeach; ?>
+  </ul>
+  <?php endif; ?>
 
 <main class="container py-4">
     <?php if ($hdrUser): ?>
