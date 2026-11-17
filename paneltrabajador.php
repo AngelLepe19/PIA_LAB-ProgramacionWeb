@@ -61,7 +61,7 @@ $res_mensajes = $conn->query($sql_mensajes);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel Trabajador - LecturaLibre</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=2">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
     <script src="assets/js/main.js"></script>
     <style>
         /* Estilos limpios y profesionales para la tabla del panel */
@@ -121,24 +121,20 @@ $res_mensajes = $conn->query($sql_mensajes);
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <details class="search-toggle" name="header-controls">
-                <summary class="btn search-icon" aria-label="Abrir búsqueda" title="Buscar">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                </summary>
-                <form class="search-bar" action="catalogo.php" method="get" role="search">
-                    <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
-                           placeholder="Buscar título, autor o categoría...">
-                    <button type="submit" class="btn search-icon" aria-label="Buscar">
-                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                    </button>
-                </form>
-            </details>
-
-            <details class="nav-menu-toggle" name="header-controls">
+            <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
+
+            <form class="search-bar" action="catalogo.php" method="get" role="search">
+                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                       placeholder="Buscar libros…">
+                <button type="submit" class="btn search-icon" aria-label="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </button>
+            </form>
+
             <div class="nav-menu" id="nav-menu">
                 <ul class="nav-links">
                     <li><a href="index.php" id="link-inicio">Inicio</a></li>
