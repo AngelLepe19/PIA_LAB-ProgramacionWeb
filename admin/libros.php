@@ -108,7 +108,7 @@ $sql = "SELECT l.id_libro, l.titulo, l.isbn, l.precio, l.copias_disponibles, l.l
                (SELECT GROUP_CONCAT(c.nombre ORDER BY c.nombre SEPARATOR ', ')
                   FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
                  WHERE lc.id_libro = l.id_libro) AS categorias,
-               (SELECT COALESCE(SUM(dp.num_descargas),0) FROM detalle_pedido dp WHERE dp.id_libro = l.id_libro) AS descargas
+               (SELECT COUNT(*) FROM descargas d WHERE d.id_libro = l.id_libro) AS descargas
           FROM libros l
           JOIN autores a ON a.id_autor = l.id_autor
           $sqlWhere

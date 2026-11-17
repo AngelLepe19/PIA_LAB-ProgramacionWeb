@@ -7,6 +7,7 @@ $hdrTabs = [
     'categorias' => ['Categorías',          'categorias.php', ['Administrador']],
     'usuarios'   => ['Usuarios / Roles',    'usuarios.php',   ['Administrador']],
     'resenas'    => ['Moderación Reseñas',  'resenas.php',    ['Administrador', 'Trabajador']],
+    'mensajes'   => ['Mensajes',            'mensajes.php',   ['Administrador', 'Trabajador']],
 ];
 ?><!doctype html>
 <html lang="es">
@@ -38,6 +39,9 @@ $hdrTabs = [
                 if (!in_array($hdrUser['rol'], $hdrRoles, true)) continue; ?>
                 <li class="nav-item">
                     <a class="nav-link<?= ($tab ?? '') === $hdrClave ? ' active' : '' ?>" href="<?= e($hdrArchivo) ?>"><?= e($hdrTexto) ?></a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link <?= ($tab ?? '') === 'mensajes' ? 'active' : '' ?>" href="mensajes.php">Mensajes</a>
                 </li>
             <?php endforeach; ?>
         </ul>

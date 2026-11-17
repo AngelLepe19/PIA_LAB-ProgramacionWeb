@@ -22,14 +22,15 @@ function db(): PDO
     }
     return $pdo;
 }
-
-set_exception_handler(function (Throwable $ex) {
+    set_exception_handler(function (Throwable $ex) {
     error_log('[LecturaLibre admin] ' . $ex->getMessage());
     http_response_code(500);
     echo '<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;padding:2rem">'
        . '<h3>Ocurrió un error</h3><p>No se pudo completar la operación. '
        . 'Revisa que XAMPP (Apache y MySQL) esté encendido y que los datos de <code>admin/inc/config.php</code> sean correctos.</p>'
-       . '</body>';
+       . '<pre style="background:#f8d7da;color:#721c24;padding:12px;border-radius:6px;margin-top:15px;">'
+       . htmlspecialchars($ex->getMessage() . "\nEn: " . $ex->getFile() . " (línea " . $ex->getLine() . ")")
+       . '</pre></body>';
 });
 
 /* ---------- Utilidades ---------- */
@@ -95,7 +96,17 @@ function csrf_check(): void
 function usuario_actual(): ?array
 {
     $u = $_SESSION['usuario'] ?? null;
-    return (is_array($u) && isset($u['id'], $u['rol'])) ? $u : null;
+    if (is_array($u) && isset($u['id'], $u['rol'])) {
+        return $u;
+    }
+    if (!empty($_SESSION['id_usuario'])) {
+        return [
+            'id'     => (int)$_SESSION['id_usuario'],
+            'nombre' => (string)($_SESSION['nombre_completo'] ?? 'Usuario'),
+            'rol'    => (string)($_SESSION['rol_nombre'] ?? 'Lector'),
+        ];
+    }
+    return null;
 }
 
 function require_rol(array $rolesPermitidos): array
