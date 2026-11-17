@@ -3,6 +3,7 @@ session_start();
 require_once 'config/conexion.php';
 
 $pagina_actual = basename($_SERVER['PHP_SELF']);
+$busqueda = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
@@ -81,10 +82,13 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <div class="search-bar">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="global-search" placeholder="Buscar título, autor o categoría..." onkeyup="filterBooks()">
-            </div>
+            <form class="search-bar" action="index.php" method="get" role="search">
+                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                       placeholder="Buscar título, autor o categoría..." value="<?= htmlspecialchars($busqueda, ENT_QUOTES, 'UTF-8') ?>">
+                <button type="submit" class="btn" aria-label="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
+                </button>
+            </form>
 
             <ul class="nav-links">
                 <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
@@ -160,11 +164,34 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             INNER JOIN autores a ON l.id_autor = a.id_autor
             LEFT JOIN resenas r ON l.id_libro = r.id_libro
             WHERE l.estado = 'aprobado'
+        ";
+
+        if ($busqueda !== '') {
+            $sql_libros .= "
+                AND (l.titulo LIKE ? ESCAPE '!' OR a.nombre_artistico LIKE ? ESCAPE '!'
+                     OR EXISTS (
+                         SELECT 1 FROM libro_categoria lc
+                         INNER JOIN categorias c ON c.id_categoria = lc.id_categoria
+                         WHERE lc.id_libro = l.id_libro AND c.nombre LIKE ? ESCAPE '!'
+                     ))
+            ";
+        }
+
+        $sql_libros .= "
             GROUP BY l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico
             ORDER BY l.fecha_alta DESC
-            LIMIT 4
         ";
-        $res_libros = $conn->query($sql_libros);
+
+        if ($busqueda === '') {
+            $res_libros = $conn->query($sql_libros . " LIMIT 4");
+        } else {
+            $patron = '%' . strtr($busqueda, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            $stmt_libros = $conn->prepare($sql_libros);
+            $stmt_libros->bind_param("sss", $patron, $patron, $patron);
+            $stmt_libros->execute();
+            $res_libros = $stmt_libros->get_result();
+            $stmt_libros->close();
+        }
         ?>
 
         <section id="inicio">
@@ -179,7 +206,10 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 </div>
             </div>
 
-            <h2 class="section-title">Novedades y Destacados</h2>
+            <h2 class="section-title"><?= $busqueda === '' ? 'Novedades y Destacados' : 'Resultados de búsqueda' ?></h2>
+            <?php if ($busqueda !== ''): ?>
+                <p><a href="index.php">Limpiar búsqueda</a></p>
+            <?php endif; ?>
             <div class="book-grid" id="featured-books">
                 <?php if ($res_libros && $res_libros->num_rows > 0): ?>
                     <?php while ($libro = $res_libros->fetch_assoc()): ?>
@@ -215,7 +245,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                         </div>
                     <?php endwhile; ?>
                 <?php else: ?>
-                    <p>No hay libros disponibles por el momento.</p>
+                    <p><?= $busqueda === '' ? 'No hay libros disponibles por el momento.' : 'No se encontraron libros para esta búsqueda.' ?></p>
                 <?php endif; ?>
             </div>
         </section>

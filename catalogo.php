@@ -45,7 +45,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     }
 }
 // ---- Catálogo: filtros que llegan por la URL ----
-$q = trim($_GET['q'] ?? '');                      // texto a buscar
+$q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
 $id_categoria = (int)($_GET['categoria'] ?? 0);   // 0 = todas
 $orden = $_GET['orden'] ?? 'recientes';
 
@@ -78,11 +78,11 @@ $params = [];
 
 // Buscar por título, autor o categoría
 if ($q !== '') {
-    $sql .= " AND (l.titulo LIKE ? OR a.nombre_artistico LIKE ?
+    $sql .= " AND (l.titulo LIKE ? ESCAPE '!' OR a.nombre_artistico LIKE ? ESCAPE '!'
               OR EXISTS (SELECT 1 FROM libro_categoria lc2
                          JOIN categorias c2 ON c2.id_categoria = lc2.id_categoria
-                         WHERE lc2.id_libro = l.id_libro AND c2.nombre LIKE ?))";
-    $like = "%$q%";
+                         WHERE lc2.id_libro = l.id_libro AND c2.nombre LIKE ? ESCAPE '!'))";
+    $like = '%' . strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
     $tipos .= 'sss';
     array_push($params, $like, $like, $like);
 }
@@ -132,10 +132,13 @@ if ($logueado) {
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <div class="search-bar">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="global-search" placeholder="Buscar título, autor o categoría..." onkeyup="filterBooks()">
-            </div>
+            <form class="search-bar" action="catalogo.php" method="get" role="search">
+                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                       placeholder="Buscar título, autor o categoría..." value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>">
+                <button type="submit" class="btn" aria-label="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
+                </button>
+            </form>
 
             <ul class="nav-links">
                 <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>

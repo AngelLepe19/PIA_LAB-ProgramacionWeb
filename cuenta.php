@@ -15,10 +15,13 @@
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <div class="search-bar">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="global-search" placeholder="Buscar título, autor o categoría..." onkeyup="filterBooks()">
-            </div>
+            <form class="search-bar" action="catalogo.php" method="get" role="search">
+                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                       placeholder="Buscar título, autor o categoría...">
+                <button type="submit" class="btn" aria-label="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
+                </button>
+            </form>
 
             <ul class="nav-links">
                 <li><a href="javascript:void(0)" id="link-inicio" onclick="window.location.href='index.html'">Inicio</a></li>

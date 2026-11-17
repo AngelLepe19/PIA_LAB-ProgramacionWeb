@@ -121,9 +121,12 @@ $res_mensajes = $conn->query($sql_mensajes);
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="GET">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="global-search" name="q" placeholder="Buscar título, autor o categoría...">
+            <form class="search-bar" action="catalogo.php" method="get" role="search">
+                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                       placeholder="Buscar título, autor o categoría...">
+                <button type="submit" class="btn" aria-label="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
+                </button>
             </form>
 
             <ul class="nav-links">
