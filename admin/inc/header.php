@@ -9,38 +9,100 @@ $hdrTabs = [
     'resenas'    => ['Moderación Reseñas',  'resenas.php',    ['Administrador', 'Trabajador']],
     'mensajes'   => ['Mensajes',            'mensajes.php',   ['Administrador', 'Trabajador']],
 ];
+
+$hdrCartCount = 0;
+if ($hdrUser) {
+    try {
+        $stCart = db()->prepare('SELECT COUNT(*) FROM carrito WHERE id_usuario = ?');
+        $stCart->execute([(int)$hdrUser['id']]);
+        $hdrCartCount = (int)$stCart->fetchColumn();
+    } catch (Throwable $ignored) {
+        $hdrCartCount = 0;
+    }
+}
+
+$hdrPanelInfo = [
+    'Administrador' => ['Panel Admin',      'reportes.php'],
+    'Trabajador'    => ['Panel Trabajador', 'resenas.php'],
+    'Autor'         => ['Panel Autor',      'libros.php'],
+];
 ?>
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><?= e($titulo) ?> · LecturaLibre</title>
+  <title><?= e($titulo) ?> - LecturaLibre</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="assets/admin.css" rel="stylesheet">
+  <link href="../assets/css/estilos.css?v=4" rel="stylesheet">
+  <link href="assets/admin.css?v=2" rel="stylesheet">
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 no-print">
-  <div class="container">
-    <a class="navbar-brand fw-bold" href="../index.php">LecturaLibre</a>
-    <div class="ms-auto d-flex align-items-center gap-2 text-white">
-      <a href="../index.php" class="btn btn-sm btn-outline-light">Volver al sitio</a>
-      <?php if ($hdrUser): ?>
-        <span class="small"><?= e($hdrUser['nombre']) ?> · <strong><?= e($hdrUser['rol']) ?></strong></span>
-        <a href="../auth/logout.php" class="btn btn-sm btn-outline-danger">Cerrar sesión</a>
-      <?php endif; ?>
+
+<header class="no-print">
+  <div class="container navbar">
+    <a href="../index.php" class="logo">
+      <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
+    </a>
+
+    <details class="nav-menu-toggle">
+      <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </summary>
+    </details>
+
+    <form class="search-bar" action="../catalogo.php" method="get" role="search">
+      <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+             placeholder="Buscar libros…">
+      <button type="submit" class="btn search-icon" aria-label="Buscar">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      </button>
+    </form>
+
+    <div class="nav-menu" id="nav-menu">
+      <ul class="nav-links">
+        <li><a href="../index.php">Inicio</a></li>
+        <li><a href="../catalogo.php">Catálogo</a></li>
+        <li><a href="../nosotros.php">Nosotros</a></li>
+        <li><a href="../contacto.php">Contacto</a></li>
+        <?php if ($hdrUser && isset($hdrPanelInfo[$hdrUser['rol']])):
+          [$panelLabel, $panelHref] = $hdrPanelInfo[$hdrUser['rol']]; ?>
+          <li><a href="<?= e($panelHref) ?>" class="active-link"><?= e($panelLabel) ?></a></li>
+        <?php endif; ?>
+      </ul>
+
+      <div class="user-actions">
+        <button type="button" class="btn" onclick="window.location.href='../carrito.php'">
+          <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $hdrCartCount ?></span>
+        </button>
+
+        <?php if ($hdrUser): ?>
+          <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+            <button type="button" class="btn" onclick="window.location.href='../perfil.php'">
+              <i class="fa-solid fa-circle-user"></i> <span><?= e($hdrUser['nombre']) ?></span>
+            </button>
+            <a href="../auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+              <i class="fa-solid fa-right-from-bracket"></i>
+            </a>
+          </div>
+        <?php else: ?>
+          <a href="../index.php" class="btn btn-primary">Volver al inicio</a>
+        <?php endif; ?>
+      </div>
     </div>
   </div>
-</nav>
+</header>
 
-<main class="container py-3 mb-5">
+<main class="container">
   <?php if ($hdrUser): ?>
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
       <div>
-        <h1 class="h4 fw-bold panel-title mb-0">
+        <h2 class="section-title mb-1">
           Panel de <?= $hdrUser['rol'] === 'Administrador' ? 'Administración Global' : e($hdrUser['rol']) ?>
-        </h1>
-        <small class="text-muted"><?= e($titulo) ?></small>
+        </h2>
+        <div class="small text-muted">
+          Sesión activa: <strong><?= e($hdrUser['nombre']) ?></strong> (<?= e($hdrUser['rol']) ?>) · <?= e($titulo) ?>
+        </div>
       </div>
     </div>
 
@@ -55,9 +117,7 @@ $hdrTabs = [
       <?php endforeach; ?>
     </ul>
   <?php else: ?>
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-      <h1 class="h4 mb-0"><?= e($titulo) ?></h1>
-    </div>
+    <h2 class="section-title"><?= e($titulo) ?></h2>
   <?php endif; ?>
 
   <?php foreach (pull_flash() as [$hdrTipo, $hdrMsg]): ?>
