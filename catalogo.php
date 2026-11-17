@@ -121,7 +121,7 @@ if ($logueado) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=2">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -132,53 +132,65 @@ if ($logueado) {
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="get" role="search">
-                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
-                       placeholder="Buscar título, autor o categoría..." value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>">
-                <button type="submit" class="btn" aria-label="Buscar">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
-                </button>
-            </form>
+            <details class="search-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Abrir búsqueda" title="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </summary>
+                <form class="search-bar" action="catalogo.php" method="get" role="search">
+                    <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                           placeholder="Buscar título, autor o categoría..." value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="btn search-icon" aria-label="Buscar">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </details>
 
-            <ul class="nav-links">
-                <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
-                <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
-                <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
-                <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
+            <details class="nav-menu-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
+                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                </summary>
+            </details>
+            <div class="nav-menu" id="nav-menu">
+                <ul class="nav-links">
+                    <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
+                    <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
+                    <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
+                    <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
-                <?php if ($id_rol === 2 || $id_rol === 4): ?>
-                    <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
-                <?php endif; ?>
+                    <?php if ($id_rol === 2 || $id_rol === 4): ?>
+                        <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
+                    <?php endif; ?>
 
-                <?php if ($id_rol === 3 || $id_rol === 4): ?>
-                    <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
-                <?php endif; ?>
+                    <?php if ($id_rol === 3 || $id_rol === 4): ?>
+                        <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
+                    <?php endif; ?>
 
-                <?php if ($id_rol === 4): ?>
-                    <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
-                <?php endif; ?>
-            </ul>
+                    <?php if ($id_rol === 4): ?>
+                        <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
+                    <?php endif; ?>
+                </ul>
 
-            <div class="user-actions">
-                <button class="btn" onclick="window.location.href='carrito.php'">
-                    <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
-                </button>
+                <div class="user-actions">
+                    <button class="btn" onclick="window.location.href='carrito.php'">
+                        <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
+                    </button>
 
-                <?php if (!$logueado): ?>
-                    <div id="auth-buttons">
-                        <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
-                        <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
-                    </div>
-                <?php else: ?>
-                    <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn" onclick="window.location.href='perfil.php'">
-                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
-                        </button>
-                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
-                            <i class="fa-solid fa-right-from-bracket"></i>
-                        </a>
-                    </div>
-                <?php endif; ?>
+                    <?php if (!$logueado): ?>
+                        <div id="auth-buttons">
+                            <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
+                            <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
+                        </div>
+                    <?php else: ?>
+                        <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn" onclick="window.location.href='perfil.php'">
+                                <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                            </button>
+                            <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </header>
@@ -196,9 +208,9 @@ if ($logueado) {
         <h2 class="section-title">Catálogo Completo</h2>
 
         <!-- Filtros (se mandan por GET) -->
-        <form method="GET" action="catalogo.php" style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Título, autor o categoría" style="padding: 8px;">
-            <select name="categoria" style="padding: 8px;">
+        <form class="catalog-filters" method="get" action="catalogo.php">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Título, autor o categoría" aria-label="Buscar por título, autor o categoría">
+            <select name="categoria" aria-label="Categoría">
                 <option value="0">Todas las categorías</option>
                 <?php foreach ($categorias as $cat): ?>
                     <option value="<?= (int)$cat['id_categoria'] ?>" <?= $id_categoria === (int)$cat['id_categoria'] ? 'selected' : '' ?>>
@@ -206,7 +218,7 @@ if ($logueado) {
                     </option>
                 <?php endforeach; ?>
             </select>
-            <select name="orden" style="padding: 8px;">
+            <select name="orden" aria-label="Orden de resultados">
                 <option value="recientes" <?= $orden === 'recientes' ? 'selected' : '' ?>>Más recientes</option>
                 <option value="populares" <?= $orden === 'populares' ? 'selected' : '' ?>>Más leídos</option>
                 <option value="valoracion" <?= $orden === 'valoracion' ? 'selected' : '' ?>>Mejor valorados</option>
@@ -248,7 +260,12 @@ if ($logueado) {
             <?php endforeach; ?>
 
             <?php if (count($libros) === 0): ?>
-                <p>No se encontraron libros con esos filtros.</p>
+                <div class="search-feedback">
+                    <p>No se encontraron libros con esos filtros.</p>
+                    <?php if ($q !== '' || $id_categoria > 0): ?>
+                        <a class="search-clear" href="catalogo.php">Limpiar búsqueda</a>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
         </div>
     </section>

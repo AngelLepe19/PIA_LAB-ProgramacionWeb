@@ -61,7 +61,7 @@ $res_mensajes = $conn->query($sql_mensajes);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel Trabajador - LecturaLibre</title>
-    <link rel="stylesheet" href="assets/css/estilos.css">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=2">
     <script src="assets/js/main.js"></script>
     <style>
         /* Estilos limpios y profesionales para la tabla del panel */
@@ -121,45 +121,57 @@ $res_mensajes = $conn->query($sql_mensajes);
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="get" role="search">
-                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
-                       placeholder="Buscar título, autor o categoría...">
-                <button type="submit" class="btn" aria-label="Buscar">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
-                </button>
-            </form>
-
-            <ul class="nav-links">
-                <li><a href="index.php" id="link-inicio">Inicio</a></li>
-                <li><a href="catalogo.php" id="link-catalogo">Catálogo</a></li>
-                <li><a href="nosotros.php" id="link-nosotros">Nosotros</a></li>
-                <li><a href="contacto.php" id="link-contacto">Contacto</a></li>
-
-                <?php if ($id_rol === 2 || $id_rol === 4): ?>
-                    <li id="author-nav-item"><a href="panelautor.php">Panel Autor</a></li>
-                <?php endif; ?>
-
-                <?php if ($id_rol === 3 || $id_rol === 4): ?>
-                    <li id="worker-nav-item"><a href="paneltrabajador.php" class="active-link">Panel Trabajador</a></li>
-                <?php endif; ?>
-
-                <?php if ($id_rol === 4): ?>
-                    <li id="admin-nav-item"><a href="paneladmin.php">Panel Admin</a></li>
-                <?php endif; ?>
-            </ul>
-
-            <div class="user-actions">
-                <button class="btn" onclick="window.location.href='carrito.php'">
-                    <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
-                </button>
-
-                <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
-                    <button class="btn" onclick="window.location.href='perfil.php'">
-                        <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+            <details class="search-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Abrir búsqueda" title="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </summary>
+                <form class="search-bar" action="catalogo.php" method="get" role="search">
+                    <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                           placeholder="Buscar título, autor o categoría...">
+                    <button type="submit" class="btn search-icon" aria-label="Buscar">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                     </button>
-                    <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                    </a>
+                </form>
+            </details>
+
+            <details class="nav-menu-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
+                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                </summary>
+            </details>
+            <div class="nav-menu" id="nav-menu">
+                <ul class="nav-links">
+                    <li><a href="index.php" id="link-inicio">Inicio</a></li>
+                    <li><a href="catalogo.php" id="link-catalogo">Catálogo</a></li>
+                    <li><a href="nosotros.php" id="link-nosotros">Nosotros</a></li>
+                    <li><a href="contacto.php" id="link-contacto">Contacto</a></li>
+
+                    <?php if ($id_rol === 2 || $id_rol === 4): ?>
+                        <li id="author-nav-item"><a href="panelautor.php">Panel Autor</a></li>
+                    <?php endif; ?>
+
+                    <?php if ($id_rol === 3 || $id_rol === 4): ?>
+                        <li id="worker-nav-item"><a href="paneltrabajador.php" class="active-link">Panel Trabajador</a></li>
+                    <?php endif; ?>
+
+                    <?php if ($id_rol === 4): ?>
+                        <li id="admin-nav-item"><a href="paneladmin.php">Panel Admin</a></li>
+                    <?php endif; ?>
+                </ul>
+
+                <div class="user-actions">
+                    <button class="btn" onclick="window.location.href='carrito.php'">
+                        <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
+                    </button>
+
+                    <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn" onclick="window.location.href='perfil.php'">
+                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                        </button>
+                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

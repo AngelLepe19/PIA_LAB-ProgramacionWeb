@@ -56,7 +56,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=2">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -67,53 +67,65 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="get" role="search">
-                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
-                       placeholder="Buscar título, autor o categoría...">
-                <button type="submit" class="btn" aria-label="Buscar">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
-                </button>
-            </form>
+            <details class="search-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Abrir búsqueda" title="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </summary>
+                <form class="search-bar" action="catalogo.php" method="get" role="search">
+                    <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                           placeholder="Buscar título, autor o categoría...">
+                    <button type="submit" class="btn search-icon" aria-label="Buscar">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </details>
 
-            <ul class="nav-links">
-                <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
-                <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
-                <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
-                <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
+            <details class="nav-menu-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
+                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                </summary>
+            </details>
+            <div class="nav-menu" id="nav-menu">
+                <ul class="nav-links">
+                    <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
+                    <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
+                    <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
+                    <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
-                <?php if ($id_rol === 2 || $id_rol === 4): ?>
-                    <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
-                <?php endif; ?>
+                    <?php if ($id_rol === 2 || $id_rol === 4): ?>
+                        <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
+                    <?php endif; ?>
 
-                <?php if ($id_rol === 3 || $id_rol === 4): ?>
-                    <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
-                <?php endif; ?>
+                    <?php if ($id_rol === 3 || $id_rol === 4): ?>
+                        <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
+                    <?php endif; ?>
 
-                <?php if ($id_rol === 4): ?>
-                    <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
-                <?php endif; ?>
-            </ul>
+                    <?php if ($id_rol === 4): ?>
+                        <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
+                    <?php endif; ?>
+                </ul>
 
-            <div class="user-actions">
-                <button class="btn" onclick="window.location.href='carrito.php'">
-                    <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
-                </button>
+                <div class="user-actions">
+                    <button class="btn" onclick="window.location.href='carrito.php'">
+                        <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
+                    </button>
 
-                <?php if (!$logueado): ?>
-                    <div id="auth-buttons">
-                        <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
-                        <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
-                    </div>
-                <?php else: ?>
-                    <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn" onclick="window.location.href='perfil.php'">
-                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
-                        </button>
-                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
-                            <i class="fa-solid fa-right-from-bracket"></i>
-                        </a>
-                    </div>
-                <?php endif; ?>
+                    <?php if (!$logueado): ?>
+                        <div id="auth-buttons">
+                            <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
+                            <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
+                        </div>
+                    <?php else: ?>
+                        <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn" onclick="window.location.href='perfil.php'">
+                                <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                            </button>
+                            <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </header>
@@ -152,6 +164,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 </div>
 
                 <h3 style="margin-top: 25px;">Descargas Totales por Categoría</h3>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table" style="margin-bottom: 30px;">
                     <thead>
                         <tr>
@@ -162,21 +175,26 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                     </thead>
                     <tbody id="admin-category-reports-table"></tbody>
                 </table>
+                </div>
 
                 <h3>Libros Más Descargados / Leídos</h3>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table">
                     <thead><tr><th>Título</th><th>Autor</th><th>Categoría</th><th>Descargas / Lecturas</th><th>Valoración</th></tr></thead>
                     <tbody id="admin-reports-table"></tbody>
                 </table>
+                </div>
             </div>
 
             <!-- TAB LIBROS -->
             <div id="adm-libros" class="admin-tab" style="display: none;">
                 <button class="btn btn-primary" onclick="openBookModal()"><i class="fa-solid fa-plus"></i> Agregar Libro</button>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table">
                     <thead><tr><th>ID</th><th>Título</th><th>Autor</th><th>Categoría</th><th>Descargas</th><th>Acciones</th></tr></thead>
                     <tbody id="admin-books-table"></tbody>
                 </table>
+                </div>
             </div>
 
             <!-- TAB CATEGORÍAS -->
@@ -185,26 +203,32 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                     <input type="text" id="new-cat-input" placeholder="Nueva categoría..." required style="padding: 8px;">
                     <button type="submit" class="btn btn-primary">Añadir</button>
                 </form>
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table" style="max-width: 500px;">
                     <thead><tr><th>Categoría</th><th>Acción</th></tr></thead>
                     <tbody id="admin-cats-table"></tbody>
                 </table>
+                </div>
             </div>
 
             <!-- TAB USUARIOS -->
             <div id="adm-usuarios" class="admin-tab" style="display: none;">
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table">
                     <thead><tr><th>Nombre</th><th>Email</th><th>Rol Actual</th><th>Acción</th></tr></thead>
                     <tbody id="admin-users-table"></tbody>
                 </table>
+                </div>
             </div>
 
             <!-- TAB MODERACIÓN DE RESEÑAS -->
             <div id="adm-resenas" class="admin-tab" style="display: none;">
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
                 <table class="wf-table">
                     <thead><tr><th>Libro</th><th>Usuario</th><th>Comentario</th><th>Estado</th><th>Acciones</th></tr></thead>
                     <tbody id="admin-reviews-table"></tbody>
                 </table>
+                </div>
             </div>
         </section>
 

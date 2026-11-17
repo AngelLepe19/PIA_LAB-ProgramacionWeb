@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=2">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -15,33 +15,45 @@
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="get" role="search">
-                <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
-                       placeholder="Buscar título, autor o categoría...">
-                <button type="submit" class="btn" aria-label="Buscar">
-                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Buscar
-                </button>
-            </form>
+            <details class="search-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Abrir búsqueda" title="Buscar">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                </summary>
+                <form class="search-bar" action="catalogo.php" method="get" role="search">
+                    <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
+                           placeholder="Buscar título, autor o categoría...">
+                    <button type="submit" class="btn search-icon" aria-label="Buscar">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    </button>
+                </form>
+            </details>
 
-            <ul class="nav-links">
-                <li><a href="javascript:void(0)" id="link-inicio" onclick="window.location.href='index.html'">Inicio</a></li>
-                <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
-                <li><a href="javascript:void(0)" id="link-nosotros" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
-                <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
-                <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
-                <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
-                <li id="admin-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-admin-dashboard" onclick="window.location.href='paneladmin.html'">Panel Admin</a></li>
-            </ul>
+            <details class="nav-menu-toggle" name="header-controls">
+                <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
+                    <i class="fa-solid fa-bars" aria-hidden="true"></i>
+                </summary>
+            </details>
+            <div class="nav-menu" id="nav-menu">
+                <ul class="nav-links">
+                    <li><a href="javascript:void(0)" id="link-inicio" onclick="window.location.href='index.html'">Inicio</a></li>
+                    <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
+                    <li><a href="javascript:void(0)" id="link-nosotros" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
+                    <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
+                    <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
+                    <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
+                    <li id="admin-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-admin-dashboard" onclick="window.location.href='paneladmin.html'">Panel Admin</a></li>
+                </ul>
 
-            <div class="user-actions">
-                <button class="btn" onclick="window.location.href='carrito.html'"><i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge">0</span></button>
-                <div id="auth-buttons">
-                    <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
-                    <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
-                </div>
-                <div id="user-menu" style="display: none; gap: 10px; align-items: center;">
-                    <button class="btn" onclick="window.location.href='perfil.html'"><i class="fa-solid fa-circle-user"></i> <span id="user-display-name">Usuario</span></button>
-                    <button class="btn btn-danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+                <div class="user-actions">
+                    <button class="btn" onclick="window.location.href='carrito.html'"><i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge">0</span></button>
+                    <div id="auth-buttons">
+                        <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
+                        <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
+                    </div>
+                    <div id="user-menu" style="display: none; gap: 10px; align-items: center;">
+                        <button class="btn" onclick="window.location.href='perfil.html'"><i class="fa-solid fa-circle-user"></i> <span id="user-display-name">Usuario</span></button>
+                        <button class="btn btn-danger" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+                    </div>
                 </div>
             </div>
         </div>
