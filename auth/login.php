@@ -25,18 +25,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (password_verify($password, $usuario['contrasena_hash'])) {
             session_regenerate_id(true);
 
-            $_SESSION['id_usuario'] = $usuario['id_usuario'];
+            $_SESSION['id_usuario'] = (int)$usuario['id_usuario'];
             $_SESSION['nombre_completo'] = $usuario['nombre_completo'];
             $_SESSION['correo'] = $usuario['correo'];
             $_SESSION['id_rol'] = (int)$usuario['id_rol'];
             $_SESSION['rol_nombre'] = $usuario['rol_nombre'];
+            $_SESSION['usuario'] = [
+                'id'     => (int)$usuario['id_usuario'],
+                'nombre' => $usuario['nombre_completo'],
+                'rol'    => $usuario['rol_nombre'],
+            ];
 
-            if ($_SESSION['id_rol'] === 4) {
-                header("Location: ../paneladmin.php");
-            } elseif ($_SESSION['id_rol'] === 3) {
-                header("Location: ../paneltrabajador.php");
-            } else {
-                header("Location: ../index.php");
+            switch ($_SESSION['id_rol']) {
+                case 4:
+                    header("Location: ../admin/reportes.php");
+                    break;
+                case 3:
+                    header("Location: ../admin/resenas.php");
+                    break;
+                case 2:
+                    header("Location: ../admin/libros.php");
+                    break;
+                default:
+                    header("Location: ../index.php");
+                    break;
             }
             exit;
         }

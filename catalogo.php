@@ -153,16 +153,12 @@ if ($logueado) {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
-                    <?php if ($id_rol === 2 || $id_rol === 4): ?>
-                        <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
-                    <?php endif; ?>
-
-                    <?php if ($id_rol === 3 || $id_rol === 4): ?>
-                        <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
-                    <?php endif; ?>
-
-                    <?php if ($id_rol === 4): ?>
-                        <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
+                    <?php if ($id_rol === 2): ?>
+                        <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
+                    <?php elseif ($id_rol === 3): ?>
+                        <li id="worker-nav-item"><a href="admin/resenas.php">Panel Trabajador</a></li>
+                    <?php elseif ($id_rol === 4): ?>
+                        <li id="admin-nav-item"><a href="admin/reportes.php">Panel Admin</a></li>
                     <?php endif; ?>
                 </ul>
 
