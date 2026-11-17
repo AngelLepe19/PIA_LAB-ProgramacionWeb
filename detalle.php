@@ -4,146 +4,107 @@ require_once 'config/conexion.php';
 
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
-$id_usuario = $logueado ? (int)$_SESSION['id_usuario'] : 0;
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
-
-$id_libro = (int)($_GET['id'] ?? $_POST['id_libro'] ?? 0);
-
-// Procesar envío de reseña (POST)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'enviar_resena') {
-    if (!$logueado) {
-        header("Location: detalle.php?id=" . $id_libro . "&error=inicia_sesion");
-        exit;
-    }
-
-    $puntuacion = (int)($_POST['puntuacion'] ?? 0);
-    $comentario = trim($_POST['comentario'] ?? '');
-
-    if ($id_libro <= 0 || $puntuacion < 1 || $puntuacion > 5 || $comentario === '') {
-        header("Location: detalle.php?id=" . $id_libro . "&error=resena_invalida");
-        exit;
-    }
-
-    if (mb_strlen($comentario) > 500) {
-        $comentario = mb_substr($comentario, 0, 500);
-    }
-
-    // La tabla resenas tiene PK compuesta (id_libro, id_usuario); si ya reseñó antes, actualiza y vuelve a 'pendiente'
-    $sql_res = "INSERT INTO resenas (id_libro, id_usuario, puntuacion, comentario, fecha_creacion, estado, id_moderador, fecha_moderacion)
-                VALUES (?, ?, ?, ?, NOW(), 'pendiente', NULL, NULL)
-                ON DUPLICATE KEY UPDATE
-                    puntuacion = VALUES(puntuacion),
-                    comentario = VALUES(comentario),
-                    fecha_creacion = NOW(),
-                    estado = 'pendiente',
-                    id_moderador = NULL,
-                    fecha_moderacion = NULL";
-    $stmt_r = $conn->prepare($sql_res);
-    $stmt_r->bind_param("iiis", $id_libro, $id_usuario, $puntuacion, $comentario);
-    $ok = $stmt_r->execute();
-    $stmt_r->close();
-
-    if ($ok) {
-        header("Location: detalle.php?id=" . $id_libro . "&resena=enviada");
-    } else {
-        header("Location: detalle.php?id=" . $id_libro . "&error=error_resena");
-    }
-    exit;
-}
 
 // Contar libros en el carrito real del usuario
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
-    $stmt_cart->bind_param("i", $id_usuario);
+    $stmt_cart->bind_param("i", $_SESSION['id_usuario']);
     $stmt_cart->execute();
     $res_cart = $stmt_cart->get_result()->fetch_assoc();
     $cart_count = (int)($res_cart['total'] ?? 0);
     $stmt_cart->close();
 }
 
-// Mensajes de aviso
+// Mensajes de aviso tras login o registro
 $alerta_texto = '';
 $alerta_tipo = '';
-if (isset($_GET['resena']) && $_GET['resena'] === 'enviada') {
-    $alerta_texto = 'Tu reseña fue enviada y está pendiente de aprobación por un moderador.';
+if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
+    $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
     $alerta_tipo = 'exito';
-} elseif (isset($_GET['error'])) {
-    $alerta_tipo = 'error';
+} elseif (isset($_GET['resena']) && $_GET['resena'] === 'enviada') {
+    $alerta_texto = 'Tu reseña se envió y está pendiente de aprobación.';
+    $alerta_tipo = 'exito';
+} elseif (isset($_GET['error'])) {    $alerta_tipo = 'error';
     switch ($_GET['error']) {
-        case 'inicia_sesion':
-            $alerta_texto = 'Debes iniciar sesión para realizar esta acción.';
+        case 'credenciales_invalidas':
+            $alerta_texto = 'Correo o contraseña incorrectos.';
+            break;
+        case 'correo_existente':
+            $alerta_texto = 'Ese correo electrónico ya está registrado.';
+            break;
+        case 'cuenta_inactiva':
+            $alerta_texto = 'Tu cuenta está pendiente o inactiva. Contacta al administrador.';
+            break;
+        case 'campos_vacios':
+            $alerta_texto = 'Por favor completa todos los campos obligatorios.';
             break;
         case 'resena_invalida':
-            $alerta_texto = 'Selecciona una calificación válida y escribe tu comentario.';
+            $alerta_texto = 'La reseña necesita calificación de 1 a 5 y un comentario de máximo 500 caracteres.';
+            break;
+        case 'resena_duplicada':
+            $alerta_texto = 'Ya escribiste una reseña para este libro.';
             break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
             break;
     }
 }
+// ---- Detalle: libro que llega por la URL (detalle.php?id=3) ----
+$id_libro = (int)($_GET['id'] ?? 0);
 
-// Consultar datos completos del libro en MySQL
-$libro = null;
-if ($id_libro > 0) {
-    $sql_libro = "
-        SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.portada,
-               l.precio, l.lecturas_acumuladas, l.estado,
-               a.nombre_artistico AS autor,
-               e.nombre AS editorial,
-               GROUP_CONCAT(DISTINCT c.nombre ORDER BY c.nombre SEPARATOR ', ') AS categorias,
-               (SELECT COUNT(*) FROM descargas d WHERE d.id_libro = l.id_libro) AS total_descargas,
-               ROUND((SELECT AVG(r.puntuacion) FROM resenas r WHERE r.id_libro = l.id_libro AND r.estado = 'aprobada'), 1) AS promedio
-        FROM libros l
-        INNER JOIN autores a ON l.id_autor = a.id_autor
-        LEFT JOIN editoriales e ON l.id_editorial = e.id_editorial
-        LEFT JOIN libro_categoria lc ON l.id_libro = lc.id_libro
-        LEFT JOIN categorias c ON lc.id_categoria = c.id_categoria
-        WHERE l.id_libro = ? AND l.estado = 'aprobado'
-        GROUP BY l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.portada,
-                 l.precio, l.lecturas_acumuladas, l.estado, a.nombre_artistico, e.nombre
-        LIMIT 1
-    ";
-    $stmt_l = $conn->prepare($sql_libro);
-    $stmt_l->bind_param("i", $id_libro);
-    $stmt_l->execute();
-    $libro = $stmt_l->get_result()->fetch_assoc();
-    $stmt_l->close();
-}
+// Datos del libro con su autor, editorial, categorías y promedio de reseñas aprobadas
+$stmt = $conn->prepare("
+    SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas,
+           a.nombre_artistico AS autor, a.biografia, e.nombre AS editorial,
+           (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
+              FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
+             WHERE lc.id_libro = l.id_libro) AS categorias,
+           (SELECT ROUND(AVG(r.puntuacion), 1) FROM resenas r
+             WHERE r.id_libro = l.id_libro AND r.estado = 'aprobada') AS promedio
+    FROM libros l
+    INNER JOIN autores a ON l.id_autor = a.id_autor
+    LEFT JOIN editoriales e ON l.id_editorial = e.id_editorial
+    WHERE l.id_libro = ? AND l.estado = 'aprobado'
+");
+$stmt->bind_param("i", $id_libro);
+$stmt->execute();
+$libro = $stmt->get_result()->fetch_assoc();   // null si no existe o no está aprobado
+$stmt->close();
 
-// Verificar si el libro está en favoritos del usuario y cargar reseñas aprobadas
-$es_favorito = false;
-$resenas_aprobadas = [];
-$mi_resena = null;
-
+// Reseñas aprobadas (las pendientes no se muestran)
+$resenas = [];
 if ($libro) {
-    if ($logueado) {
-        $stmt_f = $conn->prepare("SELECT 1 FROM favoritos WHERE id_usuario = ? AND id_libro = ?");
-        $stmt_f->bind_param("ii", $id_usuario, $id_libro);
-        $stmt_f->execute();
-        $es_favorito = $stmt_f->get_result()->num_rows > 0;
-        $stmt_f->close();
-
-        $stmt_mr = $conn->prepare("SELECT puntuacion, comentario, estado FROM resenas WHERE id_libro = ? AND id_usuario = ?");
-        $stmt_mr->bind_param("ii", $id_libro, $id_usuario);
-        $stmt_mr->execute();
-        $mi_resena = $stmt_mr->get_result()->fetch_assoc();
-        $stmt_mr->close();
-    }
-
-    $sql_resenas = "
-        SELECT r.puntuacion, r.comentario, r.fecha_creacion, u.nombre_completo AS lector
+    $stmt_r = $conn->prepare("
+        SELECT r.puntuacion, r.comentario, r.fecha_creacion, u.nombre_completo
         FROM resenas r
         INNER JOIN usuarios u ON r.id_usuario = u.id_usuario
         WHERE r.id_libro = ? AND r.estado = 'aprobada'
         ORDER BY r.fecha_creacion DESC
-    ";
-    $stmt_ra = $conn->prepare($sql_resenas);
-    $stmt_ra->bind_param("i", $id_libro);
-    $stmt_ra->execute();
-    $resenas_aprobadas = $stmt_ra->get_result()->fetch_all(MYSQLI_ASSOC);
-    $stmt_ra->close();
+    ");
+    $stmt_r->bind_param("i", $id_libro);
+    $stmt_r->execute();
+    $resenas = $stmt_r->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt_r->close();
+}
+
+// Si hay sesión: ¿es favorito? ¿ya lo reseñó?
+$es_favorito = false;
+$mi_resena = null;
+if ($logueado && $libro) {
+    $stmt_f = $conn->prepare("SELECT 1 FROM favoritos WHERE id_usuario = ? AND id_libro = ?");
+    $stmt_f->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
+    $stmt_f->execute();
+    $es_favorito = $stmt_f->get_result()->num_rows > 0;
+    $stmt_f->close();
+
+    $stmt_m = $conn->prepare("SELECT estado FROM resenas WHERE id_usuario = ? AND id_libro = ?");
+    $stmt_m->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
+    $stmt_m->execute();
+    $mi_resena = $stmt_m->get_result()->fetch_assoc();
+    $stmt_m->close();
 }
 ?>
 <!DOCTYPE html>
@@ -151,7 +112,7 @@ if ($libro) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $libro ? htmlspecialchars($libro['titulo']) . ' - LecturaLibre' : 'Detalle del libro | LecturaLibre' ?></title>
+    <title>LecturaLibre - Plataforma Gratuita</title>
     <link rel="stylesheet" href="assets/css/estilos.css">
     <script src="assets/js/main.js"></script>
 </head>
@@ -163,54 +124,46 @@ if ($libro) {
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <form class="search-bar" action="catalogo.php" method="GET">
+            <div class="search-bar">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="search" id="global-search" name="q"
-                       aria-label="Buscar libros"
-                       placeholder="Buscar título, autor o categoría...">
-            </form>
+                <input type="text" id="global-search" placeholder="Buscar título, autor o categoría..." onkeyup="filterBooks()">
+            </div>
 
             <ul class="nav-links">
-                <li><a href="index.php" id="link-inicio">Inicio</a></li>
-                <li><a href="catalogo.php" id="link-catalogo" class="active-link">Catálogo</a></li>
-                <li><a href="nosotros.php" id="link-nosotros">Nosotros</a></li>
-                <li><a href="contacto.php" id="link-contacto">Contacto</a></li>
+                <li><a href="index.php" id="link-inicio" class="<?= $pagina_actual === 'index.php' ? 'active-link' : '' ?>">Inicio</a></li>
+                <li><a href="catalogo.php" id="link-catalogo" class="<?= $pagina_actual === 'catalogo.php' ? 'active-link' : '' ?>">Catálogo</a></li>
+                <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
+                <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
                 <?php if ($id_rol === 2 || $id_rol === 4): ?>
-                    <li id="author-nav-item"><a href="panelautor.php">Panel Autor</a></li>
+                    <li id="author-nav-item"><a href="panelautor.php" class="<?= $pagina_actual === 'panelautor.php' ? 'active-link' : '' ?>">Panel Autor</a></li>
                 <?php endif; ?>
 
                 <?php if ($id_rol === 3 || $id_rol === 4): ?>
-                    <li id="worker-nav-item"><a href="paneltrabajador.php">Panel Trabajador</a></li>
+                    <li id="worker-nav-item"><a href="paneltrabajador.php" class="<?= $pagina_actual === 'paneltrabajador.php' ? 'active-link' : '' ?>">Panel Trabajador</a></li>
                 <?php endif; ?>
 
                 <?php if ($id_rol === 4): ?>
-                    <li id="admin-nav-item"><a href="paneladmin.php">Panel Admin</a></li>
+                    <li id="admin-nav-item"><a href="paneladmin.php" class="<?= $pagina_actual === 'paneladmin.php' ? 'active-link' : '' ?>">Panel Admin</a></li>
                 <?php endif; ?>
             </ul>
 
             <div class="user-actions">
-                <button type="button" class="btn" aria-label="Ver carrito" onclick="window.location.href='carrito.php'">
-                    <i class="fa-solid fa-cart-shopping"></i>
-                    <span id="cart-count" class="badge"><?= $cart_count ?></span>
+                <button class="btn" onclick="window.location.href='carrito.php'">
+                    <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
                 </button>
 
                 <?php if (!$logueado): ?>
                     <div id="auth-buttons">
-                        <button type="button" class="btn" onclick="openAuthModal('login')">
-                            <i class="fa-regular fa-user"></i> Iniciar Sesión
-                        </button>
-                        <button type="button" class="btn btn-primary" onclick="openAuthModal('signup')">
-                            Registrarse
-                        </button>
+                        <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
+                        <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
                     </div>
                 <?php else: ?>
                     <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
-                        <button type="button" class="btn" onclick="window.location.href='perfil.php'">
-                            <i class="fa-solid fa-circle-user"></i>
-                            <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                        <button class="btn" onclick="window.location.href='perfil.php'">
+                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
                         </button>
-                        <a href="auth/logout.php" class="btn btn-danger" aria-label="Cerrar sesión" title="Cerrar sesión">
+                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
                             <i class="fa-solid fa-right-from-bracket"></i>
                         </a>
                     </div>
@@ -227,176 +180,132 @@ if ($libro) {
         </div>
     <?php endif; ?>
 
-    <main class="container">
-        <section id="detalle">
-            <a class="btn" style="margin-bottom: 15px;" href="catalogo.php">
-                &larr; Volver al Catálogo
-            </a>
+   <main class="container">
+    <a href="catalogo.php" class="btn" style="margin-bottom: 15px;">&larr; Volver al catálogo</a>
 
-            <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
-                <?php if (!$libro): ?>
-                    <p>El libro solicitado no existe o no está disponible en el catálogo.</p>
-                <?php else: ?>
-                    <?php
-                    $portada_ruta = trim((string)($libro['portada'] ?? ''));
-                    $precio_texto = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
-                    $rating_texto = $libro['promedio'] !== null ? $libro['promedio'] . ' / 5' : 'Sin valoraciones aún';
-                    $descargas_mostrar = max((int)$libro['total_descargas'], (int)$libro['lecturas_acumuladas']);
-                    ?>
-                    <div id="book-detail-content" style="display: flex; gap: 30px; margin-bottom: 25px; flex-wrap: wrap;">
-                        <?php if ($portada_ruta !== '' && file_exists($portada_ruta)): ?>
-                            <img src="<?= htmlspecialchars($portada_ruta) ?>"
-                                 alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>"
-                                 style="width: 200px; height: 280px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--wf-border);">
-                        <?php else: ?>
-                            <div class="placeholder-box" style="width: 200px; height: 280px; flex-shrink: 0;">
-                                PORTADA
-                            </div>
-                        <?php endif; ?>
+    <?php if (!$libro): ?>
+        <!-- El id no existe o el libro no está aprobado -->
+        <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+            <h2>Libro no encontrado</h2>
+            <p>El libro no existe o todavía no ha sido aprobado.</p>
+        </div>
+    <?php else: ?>
+        <?php $precio = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2); ?>
 
-                        <div style="flex: 1; min-width: 260px;">
-                            <h2><?= htmlspecialchars($libro['titulo']) ?></h2>
-                            <p style="margin-top: 5px;">
-                                <strong>Autor:</strong> <?= htmlspecialchars($libro['autor']) ?>
-                                <?php if (!empty($libro['categorias'])): ?>
-                                    | <strong>Categorías:</strong> <?= htmlspecialchars($libro['categorias']) ?>
-                                <?php endif; ?>
-                            </p>
-                            <?php if (!empty($libro['editorial']) || !empty($libro['isbn'])): ?>
-                                <p style="font-size: 0.85rem; color: var(--wf-gray); margin-top: 4px;">
-                                    <?php if (!empty($libro['editorial'])): ?>
-                                        <strong>Editorial:</strong> <?= htmlspecialchars($libro['editorial']) ?>
-                                    <?php endif; ?>
-                                    <?php if (!empty($libro['isbn'])): ?>
-                                        <?= !empty($libro['editorial']) ? ' | ' : '' ?><strong>ISBN:</strong> <?= htmlspecialchars($libro['isbn']) ?>
-                                    <?php endif; ?>
-                                </p>
-                            <?php endif; ?>
+        <section id="detalle" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                <div class="placeholder-box" style="width: 200px; height: 280px;">PORTADA</div>
 
-                            <div class="stars" style="margin: 8px 0;">
-                                ⭐⭐⭐⭐⭐ (<?= htmlspecialchars($rating_texto) ?>)
-                            </div>
+                <div style="flex: 1; min-width: 250px;">
+                    <h2><?= htmlspecialchars($libro['titulo']) ?></h2>
+                    <p><strong>Autor:</strong> <?= htmlspecialchars($libro['autor']) ?></p>
+                    <p><strong>Categorías:</strong> <?= htmlspecialchars($libro['categorias'] ?? 'Sin categoría') ?></p>
+                    <?php if ($libro['editorial']): ?>
+                        <p><strong>Editorial:</strong> <?= htmlspecialchars($libro['editorial']) ?></p>
+                    <?php endif; ?>
+                    <?php if ($libro['fecha_publicacion']): ?>
+                        <p><strong>Publicación:</strong> <?= date('d/m/Y', strtotime($libro['fecha_publicacion'])) ?></p>
+                    <?php endif; ?>
+                    <?php if ($libro['isbn']): ?>
+                        <p><strong>ISBN:</strong> <?= htmlspecialchars($libro['isbn']) ?></p>
+                    <?php endif; ?>
+                    <div class="stars">⭐ <?= $libro['promedio'] ?? 'Sin reseñas' ?> (<?= count($resenas) ?> reseñas)</div>
 
-                            <p style="margin: 15px 0;">
-                                <?= !empty($libro['sinopsis']) ? nl2br(htmlspecialchars($libro['sinopsis'])) : 'Sin sinopsis disponible.' ?>
-                            </p>
+                    <p style="margin: 15px 0;"><?= nl2br(htmlspecialchars($libro['sinopsis'] ?? '')) ?></p>
+                    <h3 style="color: #27ae60;"><?= $precio ?></h3>
+                    <p style="font-size: 0.85rem; color: var(--wf-gray);">Lecturas: <?= (int)$libro['lecturas_acumuladas'] ?></p>
 
-                            <h3 style="color: #27ae60;"><?= $precio_texto ?></h3>
-                            <p style="font-size: 0.85rem; color: var(--wf-gray);">
-                                Descargas / Lecturas totales: <?= $descargas_mostrar ?>
-                            </p>
-
-                            <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-                                <a href="php/carrito_agregar.php?id_libro=<?= $id_libro ?>" class="btn btn-primary">
-                                    <i class="fa-solid fa-cart-shopping"></i> Agregar al Carrito de Lectura
-                                </a>
-                                <a href="php/favorito_toggle.php?id_libro=<?= $id_libro ?>" class="btn">
-                                    <i class="<?= $es_favorito ? 'fa-solid' : 'fa-regular' ?> fa-heart" style="color: #e74c3c;"></i>
-                                    <?= $es_favorito ? 'En Favoritos' : 'Guardar en Favoritos' ?>
-                                </a>
-                            </div>
-                        </div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                        <a href="php/carrito_agregar.php?id_libro=<?= $id_libro ?>" class="btn btn-primary">
+                            <i class="fa-solid fa-cart-shopping"></i> Agregar al carrito
+                        </a>
+                        <a href="php/favorito_toggle.php?id_libro=<?= $id_libro ?>" class="btn">
+                            <i class="<?= $es_favorito ? 'fa-solid' : 'fa-regular' ?> fa-heart"></i>
+                            <?= $es_favorito ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>
+                        </a>
                     </div>
+                </div>
+            </div>
 
-                    <div id="book-reviews">
-                        <hr style="margin: 20px 0;">
-                        <h3>Reseñas y Valoraciones</h3>
+            <?php if ($libro['biografia']): ?>
+                <hr style="margin: 20px 0;">
+                <h3>Sobre el autor</h3>
+                <p><?= nl2br(htmlspecialchars($libro['biografia'])) ?></p>
+            <?php endif; ?>
 
-                        <div id="reviews-list" style="margin: 15px 0;">
-                            <?php if (count($resenas_aprobadas) === 0): ?>
-                                <p style="color: var(--wf-gray);">Sin reseñas aprobadas disponibles para este libro.</p>
-                            <?php else: ?>
-                                <?php foreach ($resenas_aprobadas as $rev): ?>
-                                    <div style="background: var(--wf-bg); padding: 12px 15px; border-radius: var(--radius); margin-bottom: 10px; border: 1px solid var(--wf-light-gray);">
-                                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <strong><?= htmlspecialchars($rev['lector']) ?></strong>
-                                            <small style="color: var(--wf-gray);"><?= htmlspecialchars(substr((string)$rev['fecha_creacion'], 0, 10)) ?></small>
-                                        </div>
-                                        <div style="margin: 4px 0;"><?= str_repeat('⭐', (int)$rev['puntuacion']) ?></div>
-                                        <p style="font-size: 0.92rem;"><?= nl2br(htmlspecialchars($rev['comentario'])) ?></p>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </div>
-
-                        <div id="add-review-box" style="margin-top: 20px;">
-                            <h4><?= $mi_resena ? 'Actualizar tu reseña' : 'Escribir una reseña' ?></h4>
-
-                            <?php if (!$logueado): ?>
-                                <p style="color: var(--wf-gray); margin-top: 8px;">
-                                    <em><a onclick="openAuthModal('login')" style="color: var(--wf-accent); font-weight: 600; cursor: pointer; text-decoration: underline;">Inicia sesión</a> para escribir una reseña.</em>
-                                </p>
-                            <?php else: ?>
-                                <?php if ($mi_resena): ?>
-                                    <p style="font-size: 0.85rem; color: var(--wf-gray); margin-top: 4px;">
-                                        Estado actual de tu reseña: <strong><?= htmlspecialchars(ucfirst($mi_resena['estado'])) ?></strong> (si la editas volverá a revisión).
-                                    </p>
-                                <?php endif; ?>
-
-                                <form action="detalle.php?id=<?= $id_libro ?>" method="POST" style="margin-top: 10px; max-width: 600px;">
-                                    <input type="hidden" name="accion" value="enviar_resena">
-                                    <input type="hidden" name="id_libro" value="<?= $id_libro ?>">
-
-                                    <div class="form-group">
-                                        <label for="review-rating">Calificación</label>
-                                        <select id="review-rating" name="puntuacion" required>
-                                            <?php $punt_actual = (int)($mi_resena['puntuacion'] ?? 5); ?>
-                                            <option value="5" <?= $punt_actual === 5 ? 'selected' : '' ?>>⭐⭐⭐⭐⭐ (5/5)</option>
-                                            <option value="4" <?= $punt_actual === 4 ? 'selected' : '' ?>>⭐⭐⭐⭐ (4/5)</option>
-                                            <option value="3" <?= $punt_actual === 3 ? 'selected' : '' ?>>⭐⭐⭐ (3/5)</option>
-                                            <option value="2" <?= $punt_actual === 2 ? 'selected' : '' ?>>⭐⭐ (2/5)</option>
-                                            <option value="1" <?= $punt_actual === 1 ? 'selected' : '' ?>>⭐ (1/5)</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <textarea id="review-text" name="comentario" rows="3" maxlength="500" aria-label="Tu reseña"
-                                                  placeholder="Escribe tu opinión sobre el libro (máx. 500 caracteres)..." required><?= htmlspecialchars($mi_resena['comentario'] ?? '') ?></textarea>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-primary">
-                                        Enviar Reseña para Moderación
-                                    </button>
-                                </form>
-                            <?php endif; ?>
-                        </div>
+            <!-- Reseñas aprobadas -->
+            <hr style="margin: 20px 0;">
+            <h3 id="resenas">Reseñas y Valoraciones</h3>
+            <div style="margin: 15px 0;">
+                <?php foreach ($resenas as $r): ?>
+                    <div style="background: var(--wf-bg); padding: 10px; border-radius: var(--radius); margin-bottom: 10px;">
+                        <strong><?= htmlspecialchars($r['nombre_completo']) ?></strong>
+                        - <?= str_repeat('⭐', (int)$r['puntuacion']) ?>
+                        <small style="color: var(--wf-gray);"><?= date('d/m/Y', strtotime($r['fecha_creacion'])) ?></small>
+                        <p><?= nl2br(htmlspecialchars($r['comentario'])) ?></p>
                     </div>
+                <?php endforeach; ?>
+                <?php if (count($resenas) === 0): ?>
+                    <p>Este libro aún no tiene reseñas.</p>
                 <?php endif; ?>
             </div>
+
+            <!-- Formulario de reseña (se guarda en php/resena_guardar.php) -->
+            <?php if (!$logueado): ?>
+                <p style="color: var(--wf-gray);"><em>Inicia sesión para escribir una reseña.</em></p>
+            <?php elseif ($mi_resena): ?>
+                <p style="color: var(--wf-gray);"><em>Ya enviaste tu reseña de este libro (estado: <?= htmlspecialchars($mi_resena['estado']) ?>).</em></p>
+            <?php else: ?>
+                <h4>Escribir una reseña</h4>
+                <form action="php/resena_guardar.php" method="POST" style="margin-top: 10px;">
+                    <input type="hidden" name="id_libro" value="<?= $id_libro ?>">
+                    <div class="form-group">
+                        <label for="puntuacion">Calificación</label>
+                        <select id="puntuacion" name="puntuacion">
+                            <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
+                            <option value="4">⭐⭐⭐⭐ (4/5)</option>
+                            <option value="3">⭐⭐⭐ (3/5)</option>
+                            <option value="2">⭐⭐ (2/5)</option>
+                            <option value="1">⭐ (1/5)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <textarea name="comentario" rows="3" maxlength="500" required placeholder="Escribe tu opinión sobre el libro..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Enviar reseña para moderación</button>
+                </form>
+            <?php endif; ?>
         </section>
-    </main>
+    <?php endif; ?>
+</main>
 
     <div class="modal-overlay" id="authModal">
         <div class="modal">
-            <button type="button" class="close-modal" aria-label="Cerrar" onclick="closeAuthModal()">&times;</button>
-
+            <span class="close-modal" onclick="closeAuthModal()">&times;</span>
+            
             <form id="loginForm" action="auth/login.php" method="POST">
                 <h3 style="margin-bottom: 15px;">Iniciar Sesión</h3>
                 <div class="form-group">
-                    <label for="login-email">Correo Electrónico</label>
+                    <label>Correo Electrónico</label>
                     <input type="email" name="correo" id="login-email" placeholder="usuario@correo.com" required>
                 </div>
                 <div class="form-group">
-                    <label for="login-password">Contraseña</label>
-                    <input type="password" name="password" id="login-password" placeholder="••••••••" required>
+                    <label>Contraseña</label>
+                    <input type="password" name="password" placeholder="••••••••" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Ingresar</button>
-                <p class="auth-toggle">
-                    ¿Olvidaste tu contraseña? <a onclick="toggleAuthMode('recover')">Recuperar aquí</a>
-                </p>
-                <p class="auth-toggle">
-                    ¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a>
-                </p>
+                <p class="auth-toggle">¿Olvidaste tu contraseña? <a onclick="toggleAuthMode('recover')">Recuperar aquí</a></p>
+                <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
             </form>
 
             <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
                 <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
                 <div class="form-group">
-                    <label for="signup-name">Nombre Completo</label>
+                    <label>Nombre Completo</label>
                     <input type="text" name="nombre_completo" id="signup-name" placeholder="Tu Nombre" required>
                 </div>
                 <div class="form-group">
-                    <label for="signup-email">Correo Electrónico</label>
+                    <label>Correo Electrónico</label>
                     <input type="email" name="correo" id="signup-email" placeholder="usuario@correo.com" required>
                 </div>
                 <div class="form-group">
@@ -408,22 +317,18 @@ if ($libro) {
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
-                <p class="auth-toggle">
-                    ¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a>
-                </p>
+                <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
+            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
-                    <label for="recover-email">Correo Electrónico</label>
-                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
+                    <label>Correo Electrónico</label>
+                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
-                <p class="auth-toggle">
-                    <a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a>
-                </p>
+                <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
             </form>
         </div>
     </div>
@@ -448,6 +353,5 @@ if ($libro) {
             </nav>
         </div>
     </footer>
-
 </body>
 </html>
