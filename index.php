@@ -18,11 +18,24 @@ if ($logueado) {
     $stmt_cart->close();
 }
 
-// Mensajes de aviso tras login o registro
+// Mensajes de aviso tras login, registro o recuperación de contraseña
 $alerta_texto = '';
+$alerta_html_extra = '';
 $alerta_tipo = '';
+
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
+    $alerta_tipo = 'exito';
+} elseif (isset($_GET['recuperar']) && $_GET['recuperar'] === 'enviado') {
+    $alerta_texto = 'Si el correo está registrado, se ha generado un enlace de restablecimiento (válido por 1 hora).';
+    $alerta_tipo = 'exito';
+    if (!empty($_SESSION['link_recuperacion_demo'])) {
+        $link_demo = htmlspecialchars($_SESSION['link_recuperacion_demo']);
+        $alerta_html_extra = ' <a href="' . $link_demo . '" style="font-weight:bold; text-decoration:underline;">Abrir enlace de recuperación</a>';
+        unset($_SESSION['link_recuperacion_demo']);
+    }
+} elseif (isset($_GET['restablecido']) && $_GET['restablecido'] === 'exitoso') {
+    $alerta_texto = 'Tu contraseña ha sido actualizada. Ya puedes iniciar sesión.';
     $alerta_tipo = 'exito';
 } elseif (isset($_GET['error'])) {
     $alerta_tipo = 'error';
@@ -41,6 +54,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             break;
         case 'acceso_denegado':
             $alerta_texto = 'No tienes permisos para acceder a esa sección.';
+            break;
+        case 'token_invalido':
+            $alerta_texto = 'El enlace de recuperación es inválido o ya expiró.';
             break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
@@ -116,7 +132,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
-                <?= htmlspecialchars($alerta_texto) ?>
+                <?= htmlspecialchars($alerta_texto) ?><?= $alerta_html_extra ?>
             </div>
         </div>
     <?php endif; ?>
@@ -246,12 +262,12 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
+            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
                     <label>Correo Electrónico</label>
-                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
+                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
                 <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
