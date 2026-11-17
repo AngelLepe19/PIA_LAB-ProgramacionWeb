@@ -16,9 +16,11 @@ $ref = $_SERVER['HTTP_REFERER'] ?? '';
 $pagina = basename((string)parse_url($ref, PHP_URL_PATH));
 if (preg_match('/^[a-z_]+\.php$/', $pagina)) {
     $query = parse_url($ref, PHP_URL_QUERY);
+    if ($pagina === 'perfil.php' && !$query) {
+        $query = 'tab=favoritos';
+    }
     $redirect = '../' . $pagina . ($query ? '?' . $query : '');
 }
-
 // Solo se pueden marcar libros que existan y estén aprobados
 $stmt_lib = $conn->prepare("SELECT 1 FROM libros WHERE id_libro = ? AND estado = 'aprobado'");
 $stmt_lib->bind_param("i", $id_libro);

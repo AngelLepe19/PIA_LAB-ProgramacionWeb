@@ -14,6 +14,12 @@ $id_usuario = (int)$_SESSION['id_usuario'];
 $id_rol = (int)$_SESSION['id_rol'];
 $nombre_usuario = $_SESSION['nombre_completo'];
 
+// Pestaña inicial (datos | favoritos | historial)
+$tab_activa = $_GET['tab'] ?? 'datos';
+if (!in_array($tab_activa, ['datos', 'favoritos', 'historial'], true)) {
+    $tab_activa = 'datos';
+}
+
 // Obtener datos reales del usuario desde MySQL
 $sql_user = "SELECT u.nombre_completo, u.correo, r.nombre AS rol_nombre
              FROM usuarios u
@@ -32,6 +38,41 @@ $stmt_cart->execute();
 $res_cart = $stmt_cart->get_result()->fetch_assoc();
 $cart_count = (int)($res_cart['total'] ?? 0);
 $stmt_cart->close();
+
+// Lista de deseos real desde MySQL
+$sql_fav = "SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor,
+                   (SELECT ROUND(AVG(r.puntuacion), 1)
+                      FROM resenas r
+                     WHERE r.id_libro = l.id_libro AND r.estado = 'aprobada') AS promedio
+            FROM favoritos f
+            INNER JOIN libros l ON f.id_libro = l.id_libro
+            INNER JOIN autores a ON l.id_autor = a.id_autor
+            WHERE f.id_usuario = ? AND l.estado = 'aprobado'
+            ORDER BY f.fecha_agregado DESC";
+$stmt_fav = $conn->prepare($sql_fav);
+$stmt_fav->bind_param("i", $id_usuario);
+$stmt_fav->execute();
+$favoritos = $stmt_fav->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt_fav->close();
+
+// Historial de pedidos y descargas reales desde MySQL
+$sql_hist = "SELECT p.id_pedido, p.fecha_pedido, p.estado,
+                    dp.id_libro, dp.precio_unitario,
+                    l.titulo, a.nombre_artistico AS autor,
+                    (SELECT COUNT(*)
+                       FROM descargas d
+                      WHERE d.id_pedido = dp.id_pedido AND d.id_libro = dp.id_libro) AS veces_descargado
+             FROM pedidos p
+             INNER JOIN detalle_pedido dp ON p.id_pedido = dp.id_pedido
+             INNER JOIN libros l ON dp.id_libro = l.id_libro
+             INNER JOIN autores a ON l.id_autor = a.id_autor
+             WHERE p.id_usuario = ? AND p.estado <> 'cancelado'
+             ORDER BY p.fecha_pedido DESC, p.id_pedido DESC";
+$stmt_hist = $conn->prepare($sql_hist);
+$stmt_hist->bind_param("i", $id_usuario);
+$stmt_hist->execute();
+$historial = $stmt_hist->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt_hist->close();
 
 // Mensajes de aviso
 $alerta_texto = '';
@@ -128,11 +169,16 @@ if (isset($_GET['perfil']) && $_GET['perfil'] === 'actualizado') {
         <section id="perfil">
             <h2 class="section-title">Mi Cuenta</h2>
             <div class="tab-menu">
-                <button class="tab-btn active" data-profile-tab="datos" onclick="switchProfileTab('datos')">Mis Datos</button>
-                <button class="tab-btn" data-profile-tab="favoritos" onclick="switchProfileTab('favoritos')">Lista de Deseos</button>
-                <button class="tab-btn" data-profile-tab="historial" onclick="switchProfileTab('historial')">Historial de Lecturas / Descargas</button>
+                <button class="tab-btn <?= $tab_activa === 'datos' ? 'active' : '' ?>" data-profile-tab="datos" onclick="switchProfileTab('datos')">Mis Datos</button>
+                <button class="tab-btn <?= $tab_activa === 'favoritos' ? 'active' : '' ?>" data-profile-tab="favoritos" onclick="switchProfileTab('favoritos')">
+                    Lista de Deseos (<?= count($favoritos) ?>)
+                </button>
+                <button class="tab-btn <?= $tab_activa === 'historial' ? 'active' : '' ?>" data-profile-tab="historial" onclick="switchProfileTab('historial')">
+                    Historial de Lecturas / Descargas (<?= count($historial) ?>)
+                </button>
             </div>
-            <div id="tab-datos" class="profile-tab">
+
+            <div id="tab-datos" class="profile-tab" style="display: <?= $tab_activa === 'datos' ? 'block' : 'none' ?>;">
                 <form action="auth/actualizar_perfil.php" method="POST" style="max-width: 500px;">
                     <div class="form-group">
                         <label>Nombre Completo</label>
@@ -153,73 +199,91 @@ if (isset($_GET['perfil']) && $_GET['perfil'] === 'actualizado') {
                     <button type="submit" class="btn btn-primary">Guardar Cambios</button>
                 </form>
             </div>
-            <div id="tab-favoritos" class="profile-tab" style="display: none;">
-                <div class="book-grid" id="wishlist-books"></div>
+
+            <div id="tab-favoritos" class="profile-tab" style="display: <?= $tab_activa === 'favoritos' ? 'block' : 'none' ?>;">
+                <?php if (count($favoritos) > 0): ?>
+                    <div class="book-grid" id="perfil-favoritos">
+                        <?php foreach ($favoritos as $libro): ?>
+                            <?php
+                            $id_lib = (int)$libro['id_libro'];
+                            $rating = $libro['promedio'] !== null ? $libro['promedio'] : 'Nuevo';
+                            $precio = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
+                            ?>
+                            <div class="book-card">
+                                <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Quitar de favoritos" style="color: inherit;">
+                                    <i class="fa-solid fa-heart wishlist-icon"></i>
+                                </a>
+                                <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                                <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor: pointer;">
+                                    <?= htmlspecialchars($libro['titulo']) ?>
+                                </h4>
+                                <p style="font-size: 0.8rem; color: var(--wf-gray);"><?= htmlspecialchars($libro['autor']) ?></p>
+                                <div class="stars">⭐ <?= htmlspecialchars($rating) ?></div>
+                                <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
+                                    <strong style="color: #27ae60;"><?= $precio ?></strong>
+                                    <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
+                                        <i class="fa-solid fa-cart-shopping"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <p style="color: var(--wf-gray); margin-bottom: 15px;">Aún no tienes libros en tu lista de deseos.</p>
+                    <a href="catalogo.php" class="btn btn-primary">Explorar Catálogo</a>
+                <?php endif; ?>
             </div>
-            <div id="tab-historial" class="profile-tab" style="display: none;">
-                <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
-                <table class="wf-table">
-                    <thead><tr><th>ID Orden</th><th>Fecha</th><th>Costo</th><th>Estado</th><th>Acción</th></tr></thead>
-                    <tbody id="order-history-body"></tbody>
-                </table>
-                </div>
+
+            <div id="tab-historial" class="profile-tab" style="display: <?= $tab_activa === 'historial' ? 'block' : 'none' ?>;">
+                <?php if (count($historial) > 0): ?>
+                    <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de historial de lecturas y descargas">
+                        <table class="wf-table">
+                            <thead>
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Libro</th>
+                                    <th>Fecha</th>
+                                    <th>Costo</th>
+                                    <th>Descargas</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perfil-historial-body">
+                                <?php foreach ($historial as $item): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="confirmacion.php?pedido=<?= (int)$item['id_pedido'] ?>" style="text-decoration: underline;">
+                                                #<?= (int)$item['id_pedido'] ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="detalle.php?id=<?= (int)$item['id_libro'] ?>" style="font-weight: 600;">
+                                                <?= htmlspecialchars($item['titulo']) ?>
+                                            </a>
+                                            <div style="font-size: 0.8rem; color: var(--wf-gray);">
+                                                <?= htmlspecialchars($item['autor']) ?>
+                                            </div>
+                                        </td>
+                                        <td><?= date('d/m/Y H:i', strtotime($item['fecha_pedido'])) ?></td>
+                                        <td><?= (float)$item['precio_unitario'] == 0 ? 'Gratis' : '$' . number_format((float)$item['precio_unitario'], 2) ?></td>
+                                        <td><?= (int)$item['veces_descargado'] ?></td>
+                                        <td>
+                                            <a href="php/descargar.php?pedido=<?= (int)$item['id_pedido'] ?>&libro=<?= (int)$item['id_libro'] ?>" class="btn btn-primary">
+                                                <i class="fa-solid fa-download"></i> Descargar PDF
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <p style="color: var(--wf-gray); margin-bottom: 15px;">Aún no has adquirido ni descargado ningún libro.</p>
+                    <a href="catalogo.php" class="btn btn-primary">Explorar Catálogo</a>
+                <?php endif; ?>
             </div>
         </section>
     </main>
-
-    <div class="modal-overlay" id="authModal">
-        <div class="modal">
-            <span class="close-modal" onclick="closeAuthModal()">&times;</span>
-            
-            <form id="loginForm" action="auth/login.php" method="POST">
-                <h3 style="margin-bottom: 15px;">Iniciar Sesión</h3>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="login-email" placeholder="usuario@correo.com" required>
-                </div>
-                <div class="form-group">
-                    <label>Contraseña</label>
-                    <input type="password" name="password" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Ingresar</button>
-                <p class="auth-toggle">¿Olvidaste tu contraseña? <a onclick="toggleAuthMode('recover')">Recuperar aquí</a></p>
-                <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
-            </form>
-
-            <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
-                <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
-                <div class="form-group">
-                    <label>Nombre Completo</label>
-                    <input type="text" name="nombre_completo" id="signup-name" placeholder="Tu Nombre" required>
-                </div>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="signup-email" placeholder="usuario@correo.com" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password">Contraseña</label>
-                    <input type="password" name="password" id="signup-password" autocomplete="new-password" placeholder="••••••••" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password-confirm">Confirmar contraseña</label>
-                    <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
-                <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
-            </form>
-
-            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
-                <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
-                <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
-                <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
-            </form>
-        </div>
-    </div>
 
     <footer>
         <div class="container footer-cols">
