@@ -32,40 +32,37 @@ $hdrTabs = [
     </div>
   </div>
 </nav>
-<main class="container mb-5">
-  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-    <h1 class="h4 mb-0"><?= e($titulo) ?></h1>
-  </div>
+
+<main class="container py-3 mb-5">
   <?php if ($hdrUser): ?>
-  <ul class="nav nav-tabs mb-4 no-print">
-    <?php foreach ($hdrTabs as $k => [$lbl, $href, $roles]):
-      if (!es_rol($hdrUser, $roles)) continue; ?>
-      <li class="nav-item">
-        <a class="nav-link <?= ($tab ?? '') === $k ? 'active' : '' ?>" href="<?= $href ?>"><?= e($lbl) ?></a>
-      </li>
-    <?php endforeach; ?>
-  </ul>
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+      <div>
+        <h1 class="h4 fw-bold panel-title mb-0">
+          Panel de <?= $hdrUser['rol'] === 'Administrador' ? 'Administración Global' : e($hdrUser['rol']) ?>
+        </h1>
+        <small class="text-muted"><?= e($titulo) ?></small>
+      </div>
+    </div>
+
+    <ul class="nav nav-tabs panel-tabs mb-4 no-print">
+      <?php foreach ($hdrTabs as $hdrClave => [$hdrTexto, $hdrArchivo, $hdrRoles]):
+        if (!es_rol($hdrUser, ...$hdrRoles)) continue; ?>
+        <li class="nav-item">
+          <a class="nav-link<?= ($tab ?? '') === $hdrClave ? ' active' : '' ?>" href="<?= e($hdrArchivo) ?>">
+            <?= e($hdrTexto) ?>
+          </a>
+        </li>
+      <?php endforeach; ?>
+    </ul>
+  <?php else: ?>
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+      <h1 class="h4 mb-0"><?= e($titulo) ?></h1>
+    </div>
   <?php endif; ?>
 
-<main class="container py-4">
-    <?php if ($hdrUser): ?>
-        <h1 class="h4 fw-bold panel-title">Panel de <?= $hdrUser['rol'] === 'Administrador' ? 'Administración Global' : e($hdrUser['rol']) ?></h1>
-        <ul class="nav nav-tabs panel-tabs mb-3 no-print">
-            <?php foreach ($hdrTabs as $hdrClave => [$hdrTexto, $hdrArchivo, $hdrRoles]):
-                if (!in_array($hdrUser['rol'], $hdrRoles, true)) continue; ?>
-                <li class="nav-item">
-                    <a class="nav-link<?= ($tab ?? '') === $hdrClave ? ' active' : '' ?>" href="<?= e($hdrArchivo) ?>"><?= e($hdrTexto) ?></a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link <?= ($tab ?? '') === 'mensajes' ? 'active' : '' ?>" href="mensajes.php">Mensajes</a>
-                </li>
-            <?php endforeach; ?>
-        </ul>
-    <?php endif; ?>
-
-    <?php foreach (pull_flash() as [$hdrTipo, $hdrMsg]): ?>
-        <div class="alert alert-<?= e($hdrTipo) ?> alert-dismissible fade show no-print" role="alert">
-            <?= e($hdrMsg) ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    <?php endforeach; ?>
+  <?php foreach (pull_flash() as [$hdrTipo, $hdrMsg]): ?>
+    <div class="alert alert-<?= e($hdrTipo) ?> alert-dismissible fade show no-print" role="alert">
+      <?= e($hdrMsg) ?>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+  <?php endforeach; ?>

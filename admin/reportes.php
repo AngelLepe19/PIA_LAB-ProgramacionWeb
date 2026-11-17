@@ -7,13 +7,13 @@ $pdo = db();
 
 /* Indicadores generales */
 $kpi = [
-    'Descargas totales'    => (int)$pdo->query('SELECT COALESCE(SUM(num_descargas),0) FROM detalle_pedido')->fetchColumn(),
+    'Descargas totales'    => (int)$pdo->query('SELECT COUNT(*) FROM descargas')->fetchColumn(),
     'Libros registrados'   => (int)$pdo->query("SELECT COUNT(*) FROM libros WHERE estado <> 'baja'")->fetchColumn(),
     'Categorías activas'   => (int)$pdo->query('SELECT COUNT(*) FROM categorias')->fetchColumn(),
     'Usuarios registrados' => (int)$pdo->query('SELECT COUNT(*) FROM usuarios')->fetchColumn(),
 ];
 
-/* Reportes: se leen directamente de las vistas SQL de la Fase 2 */
+/* Reportes: se leen directamente de las vistas SQL */
 $porCategoria = $pdo->query('SELECT * FROM v_descargas_por_categoria')->fetchAll();
 $masDescargados = $pdo->query('SELECT * FROM v_libros_mas_descargados')->fetchAll();
 
@@ -32,7 +32,7 @@ function tabla_desde_vista(array $filas, string $vacio): void
     foreach ($filas as $fila) {
         echo '<tr>';
         foreach ($fila as $valor) {
-            echo '<td>' . ($valor === null ? '<span class="text-muted">—</span>' : e($valor)) . '</td>';
+            echo '<td>' . ($valor === null ? '<span class="text-muted">—</span>' : e((string)$valor)) . '</td>';
         }
         echo '</tr>';
     }

@@ -9,16 +9,24 @@ $estadosValidos = ['pendiente', 'aprobada', 'rechazada'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    $id = (int)($_POST['id_resena'] ?? 0);
+    $idLibro = (int)($_POST['id_libro'] ?? 0);
+    $idUsuario = (int)($_POST['id_usuario'] ?? 0);
     $accion = $_POST['accion'] ?? '';
     $nuevo = ['aprobar' => 'aprobada', 'rechazar' => 'rechazada'][$accion] ?? null;
 
-    if ($nuevo === null) {
-        flash('danger', 'Acción no válida.');
+    if ($nuevo === null || $idLibro <= 0 || $idUsuario <= 0) {
+        flash('danger', 'Acción o identificador de reseña no válido.');
     } else {
-        $st = $pdo->prepare('UPDATE resenas SET estado = ?, id_moderador = ?, fecha_moderacion = NOW() WHERE id_resena = ?');
-        $st->execute([$nuevo, $u['id'], $id]);
-        flash($st->rowCount() ? 'success' : 'warning', $st->rowCount() ? 'Reseña ' . $nuevo . '.' : 'La reseña no existe o ya tenía ese estado.');
+        $st = $pdo->prepare(
+            'UPDATE resenas
+                SET estado = ?, id_moderador = ?, fecha_moderacion = NOW()
+              WHERE id_libro = ? AND id_usuario = ?'
+        );
+        $st->execute([$nuevo, $u['id'], $idLibro, $idUsuario]);
+        flash(
+            $st->rowCount() ? 'success' : 'warning',
+            $st->rowCount() ? 'Reseña ' . $nuevo . '.' : 'La reseña no existe o ya tenía ese estado.'
+        );
     }
     redirect('resenas.php?' . http_build_query(['estado' => $_POST['estado'] ?? 'pendiente']));
 }
@@ -33,7 +41,7 @@ $st->execute([$estado]);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
 $st = $pdo->prepare(
-    'SELECT r.id_resena, r.puntuacion, r.comentario, r.fecha_creacion, r.estado, r.fecha_moderacion,
+    'SELECT r.id_libro, r.id_usuario, r.puntuacion, r.comentario, r.fecha_creacion, r.estado, r.fecha_moderacion,
             l.titulo, us.nombre_completo AS lector, mo.nombre_completo AS moderador
        FROM resenas r
        JOIN libros l ON l.id_libro = r.id_libro
@@ -81,7 +89,8 @@ require __DIR__ . '/inc/header.php';
             <td class="text-end text-nowrap">
                 <form method="post" class="d-inline">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="id_resena" value="<?= (int)$r['id_resena'] ?>">
+                    <input type="hidden" name="id_libro" value="<?= (int)$r['id_libro'] ?>">
+                    <input type="hidden" name="id_usuario" value="<?= (int)$r['id_usuario'] ?>">
                     <input type="hidden" name="estado" value="<?= e($estado) ?>">
                     <?php if ($r['estado'] !== 'aprobada'): ?>
                         <button name="accion" value="aprobar" class="btn btn-sm btn-success">Aprobar</button>
