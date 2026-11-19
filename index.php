@@ -27,6 +27,9 @@ $alerta_tipo = '';
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
     $alerta_tipo = 'exito';
+} elseif (isset($_GET['registro']) && $_GET['registro'] === 'autor') {
+    $alerta_texto = '¡Cuenta de autor creada! Entra a "Panel Autor" para publicar tu primer libro.';
+    $alerta_tipo = 'exito';
 } elseif (isset($_GET['recuperar']) && $_GET['recuperar'] === 'enviado') {
     $alerta_texto = 'Si el correo está registrado, se ha generado un enlace de restablecimiento (válido por 1 hora).';
     $alerta_tipo = 'exito';
@@ -56,6 +59,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         case 'acceso_denegado':
             $alerta_texto = 'No tienes permisos para acceder a esa sección.';
             break;
+        case 'terminos':
+            $alerta_texto = 'Debes aceptar los Términos de uso y el Aviso de privacidad para registrarte.';
+            break;
         case 'token_invalido':
             $alerta_texto = 'El enlace de recuperación es inválido o ya expiró.';
             break;
@@ -71,7 +77,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -159,6 +165,19 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             }
             $stmt_fav->close();
         }
+        // Libros que el usuario ya compró (no se pueden volver a agregar al carrito)
+        $mis_comprados = [];
+        if ($logueado) {
+            $stmt_comp = $conn->prepare("
+                SELECT DISTINCT dp.id_libro FROM detalle_pedido dp
+                INNER JOIN pedidos p ON p.id_pedido = dp.id_pedido
+                WHERE p.id_usuario = ? AND p.estado <> 'cancelado'
+            ");
+            $stmt_comp->bind_param("i", $_SESSION['id_usuario']);
+            $stmt_comp->execute();
+            $mis_comprados = array_map('intval', array_column($stmt_comp->get_result()->fetch_all(MYSQLI_ASSOC), 'id_libro'));
+            $stmt_comp->close();
+        }
 
         // Consultar libros aprobados desde MySQL
         $sql_libros = "
@@ -228,9 +247,11 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                                 <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
                             </a>
 
-                            <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
-                                PORTADA
-                            </div>
+                            <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
+                                <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
+                            <?php else: ?>
+                                <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                            <?php endif; ?>
 
                             <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor:pointer;">
                                 <?= htmlspecialchars($libro['titulo']) ?>
@@ -238,13 +259,17 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                             <p style="font-size:0.8rem; color: var(--wf-gray);">
                                 <?= htmlspecialchars($libro['autor']) ?>
                             </p>
-                            <div class="stars">⭐⭐⭐⭐⭐ (<?= htmlspecialchars($rating_texto) ?>)</div>
+                            <div class="stars">⭐ <?= htmlspecialchars($rating_texto) ?></div>
 
                             <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:center;">
                                 <strong style="color: #27ae60;"><?= $precio_texto ?></strong>
-                                <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
-                                    <i class="fa-solid fa-cart-shopping"></i>
-                                </a>
+                                <?php if (in_array($id_lib, $mis_comprados, true)): ?>
+                                    <a href="detalle.php?id=<?= $id_lib ?>" class="btn" title="Ya tienes este libro"><i class="fa-solid fa-check"></i> Comprado</a>
+                                <?php else: ?>
+                                    <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
+                                        <i class="fa-solid fa-cart-shopping"></i>
+                                    </a>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endwhile; ?>
@@ -299,6 +324,17 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                     <label for="signup-password-confirm">Confirmar contraseña</label>
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
+                    </select>
+                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
@@ -332,9 +368,13 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>
     </footer>
 </body>
-</html>
+</html>

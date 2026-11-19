@@ -27,7 +27,11 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
 } elseif (isset($_GET['resena']) && $_GET['resena'] === 'enviada') {
     $alerta_texto = 'Tu reseña se envió y está pendiente de aprobación.';
     $alerta_tipo = 'exito';
-} elseif (isset($_GET['error'])) {    $alerta_tipo = 'error';
+} elseif (isset($_GET['compra']) && $_GET['compra'] === 'ya_tienes') {
+    $alerta_texto = 'Ya compraste este libro. Puedes descargarlo de nuevo con el botón "Descargar PDF".';
+    $alerta_tipo = 'exito';
+} elseif (isset($_GET['error'])) {
+    $alerta_tipo = 'error';
     switch ($_GET['error']) {
         case 'credenciales_invalidas':
             $alerta_texto = 'Correo o contraseña incorrectos.';
@@ -57,7 +61,7 @@ $id_libro = (int)($_GET['id'] ?? 0);
 
 // Datos del libro con su autor, editorial, categorías y promedio de reseñas aprobadas
 $stmt = $conn->prepare("
-    SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas,
+    SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas, l.portada,
            a.nombre_artistico AS autor, a.biografia, e.nombre AS editorial,
            (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
               FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
@@ -93,6 +97,7 @@ if ($libro) {
 // Si hay sesión: ¿es favorito? ¿ya lo reseñó?
 $es_favorito = false;
 $mi_resena = null;
+$pedido_comprado = 0;
 if ($logueado && $libro) {
     $stmt_f = $conn->prepare("SELECT 1 FROM favoritos WHERE id_usuario = ? AND id_libro = ?");
     $stmt_f->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
@@ -105,6 +110,19 @@ if ($logueado && $libro) {
     $stmt_m->execute();
     $mi_resena = $stmt_m->get_result()->fetch_assoc();
     $stmt_m->close();
+
+    // Si ya lo compró se guarda el pedido para mostrar "Descargar PDF" en vez del carrito
+    $stmt_c = $conn->prepare("
+        SELECT p.id_pedido FROM pedidos p
+        INNER JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
+        WHERE p.id_usuario = ? AND dp.id_libro = ? AND p.estado <> 'cancelado'
+        ORDER BY p.id_pedido DESC LIMIT 1
+    ");
+    $stmt_c->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
+    $stmt_c->execute();
+    $compra = $stmt_c->get_result()->fetch_assoc();
+    $pedido_comprado = $compra ? (int)$compra['id_pedido'] : 0;
+    $stmt_c->close();
 }
 ?>
 <!DOCTYPE html>
@@ -113,7 +131,7 @@ if ($logueado && $libro) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -201,7 +219,11 @@ if ($logueado && $libro) {
 
         <section id="detalle" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
             <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-                <div class="placeholder-box" style="width: 200px; height: 280px;">PORTADA</div>
+                <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
+                    <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="portada-detalle">
+                <?php else: ?>
+                    <div class="placeholder-box" style="width: 200px; height: 280px;">PORTADA</div>
+                <?php endif; ?>
 
                 <div style="flex: 1; min-width: 250px;">
                     <h2><?= htmlspecialchars($libro['titulo']) ?></h2>
@@ -223,12 +245,21 @@ if ($logueado && $libro) {
                     <p style="font-size: 0.85rem; color: var(--wf-gray);">Lecturas: <?= (int)$libro['lecturas_acumuladas'] ?></p>
 
                     <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
-                        <a href="php/carrito_agregar.php?id_libro=<?= $id_libro ?>" class="btn btn-primary">
-                            <i class="fa-solid fa-cart-shopping"></i> Agregar al carrito
-                        </a>
+                        <?php if ($pedido_comprado > 0): ?>
+                            <a href="php/descargar.php?pedido=<?= $pedido_comprado ?>&libro=<?= $id_libro ?>" class="btn btn-primary">
+                                <i class="fa-solid fa-download"></i> Descargar PDF
+                            </a>
+                        <?php else: ?>
+                            <a href="php/carrito_agregar.php?id_libro=<?= $id_libro ?>" class="btn btn-primary">
+                                <i class="fa-solid fa-cart-shopping"></i> Agregar al carrito
+                            </a>
+                        <?php endif; ?>
                         <a href="php/favorito_toggle.php?id_libro=<?= $id_libro ?>" class="btn">
                             <i class="<?= $es_favorito ? 'fa-solid' : 'fa-regular' ?> fa-heart"></i>
                             <?= $es_favorito ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>
+                        </a>
+                        <a href="contacto.php?asunto=<?= urlencode('Reporte de contenido: ' . $libro['titulo']) ?>" class="btn" title="Reportar este libro">
+                            <i class="fa-regular fa-flag"></i> Reportar
                         </a>
                     </div>
                 </div>
@@ -323,6 +354,17 @@ if ($logueado && $libro) {
                     <label for="signup-password-confirm">Confirmar contraseña</label>
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
+                    </select>
+                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
@@ -356,9 +398,13 @@ if ($logueado && $libro) {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>
     </footer>
 </body>
-</html>
+</html>

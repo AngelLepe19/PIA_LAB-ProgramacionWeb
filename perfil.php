@@ -98,7 +98,7 @@ if (isset($_GET['perfil']) && $_GET['perfil'] === 'actualizado') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mi Perfil - LecturaLibre</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -213,7 +213,11 @@ if (isset($_GET['perfil']) && $_GET['perfil'] === 'actualizado') {
                                 <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Quitar de favoritos" style="color: inherit;">
                                     <i class="fa-solid fa-heart wishlist-icon"></i>
                                 </a>
-                                <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                                <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
+                                    <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
+                                <?php else: ?>
+                                    <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                                <?php endif; ?>
                                 <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor: pointer;">
                                     <?= htmlspecialchars($libro['titulo']) ?>
                                 </h4>
@@ -301,9 +305,13 @@ if (isset($_GET['perfil']) && $_GET['perfil'] === 'actualizado') {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>
     </footer>
 </body>
-</html>
+</html>
