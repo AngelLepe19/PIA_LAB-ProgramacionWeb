@@ -8,22 +8,26 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/inc/bootstrap.php';
 
+// Rutas iniciales permitidas dentro del panel según el rol
 $destinos = [
     'Administrador' => 'reportes.php',
     'Trabajador'    => 'resenas.php',
     'Autor'         => 'libros.php',
 ];
 
+// Si ya existe una sesión válida con acceso al panel, redirige directamente a su módulo
 if (usuario_actual() !== null && isset($destinos[usuario_actual()['rol']])) {
     redirect($destinos[usuario_actual()['rol']]);
 }
 
 $error = '';
+// Validación de credenciales cuando se envía el formulario de acceso
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $correo = trim((string)($_POST['correo'] ?? ''));
     $clave  = (string)($_POST['contrasena'] ?? '');
 
+    // Busca el usuario por correo junto con el nombre de su rol
     $st = db()->prepare(
         'SELECT u.id_usuario, u.nombre_completo, u.contrasena_hash, u.estado, r.nombre AS rol
            FROM usuarios u JOIN roles r ON r.id_rol = u.id_rol
@@ -37,8 +41,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($fila['estado'] !== 'activo') {
         $error = 'Tu cuenta aún no está activa. Un administrador debe aprobarla.';
     } elseif (!isset($destinos[$fila['rol']])) {
+        // Bloquea el acceso al panel a usuarios con rol Lector
         $error = 'Tu rol (' . $fila['rol'] . ') no tiene acceso al panel administrativo.';
     } else {
+        // Regenera el ID de sesión para prevenir fijación de sesión y guarda los datos del usuario
         session_regenerate_id(true);
         $_SESSION['usuario'] = [
             'id'     => (int)$fila['id_usuario'],
@@ -58,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="assets/admin.css" rel="stylesheet">
 </head>
 <body>
+<!-- Tarjeta centrada con el formulario de inicio de sesión -->
 <div class="container" style="max-width: 420px;">
     <div class="card shadow-sm mt-5">
         <div class="card-body p-4">

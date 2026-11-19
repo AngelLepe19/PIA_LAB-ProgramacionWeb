@@ -7,6 +7,7 @@ declare(strict_types=1);
  *    Si un autor edita un libro aprobado, vuelve a "pendiente" para revisión.
  */
 require_once __DIR__ . '/inc/bootstrap.php';
+// Permite el acceso únicamente a Administradores y Autores
 $u = require_rol(['Administrador', 'Autor']);
 $pdo = db();
 $esAdmin = es_rol($u, 'Administrador');
@@ -17,6 +18,7 @@ if (!$esAdmin) {
     $st = $pdo->prepare('SELECT id_autor FROM autores WHERE id_usuario = ?');
     $st->execute([$u['id']]);
     $miAutor = $st->fetchColumn();
+    // Si el usuario tiene rol Autor pero aún no tiene registro en la tabla autores, se genera automáticamente
     if ($miAutor === false) {
         $pdo->prepare('INSERT INTO autores (nombre_artistico, id_usuario) VALUES (?, ?)')
             ->execute([$u['nombre'], $u['id']]);
@@ -32,6 +34,7 @@ if ($id > 0) {
     $st = $pdo->prepare('SELECT * FROM libros WHERE id_libro = ?');
     $st->execute([$id]);
     $libro = $st->fetch();
+    // Verifica que el libro exista y que un autor no pueda editar obras de otros autores
     if (!$libro || (!$esAdmin && (int)$libro['id_autor'] !== $miAutor)) {
         flash('danger', 'No tienes acceso a ese libro o no existe.');
         redirect('libros.php');
@@ -44,6 +47,7 @@ $categorias  = $pdo->query('SELECT id_categoria, nombre FROM categorias ORDER BY
 $editoriales = $pdo->query('SELECT id_editorial, nombre FROM editoriales ORDER BY nombre')->fetchAll();
 $autores     = $esAdmin ? $pdo->query('SELECT id_autor, nombre_artistico FROM autores ORDER BY nombre_artistico')->fetchAll() : [];
 
+// Si estamos editando, recupera las categorías actualmente asignadas al libro
 $catsSel = [];
 if ($editando) {
     $st = $pdo->prepare('SELECT id_categoria FROM libro_categoria WHERE id_libro = ?');
@@ -68,9 +72,11 @@ $f = [
 ];
 $errores = [];
 
+// Procesa el guardado cuando se envía el formulario
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    // Captura y limpieza de todos los campos enviados
     $f['titulo']             = trim((string)($_POST['titulo'] ?? ''));
     $f['isbn']               = trim((string)($_POST['isbn'] ?? ''));
     $f['sinopsis']           = trim((string)($_POST['sinopsis'] ?? ''));
@@ -111,6 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($f['clasificacion_edad'], ['ninos', 'jovenes', 'adultos'], true)) {
         $errores[] = 'Selecciona una clasificación por edad válida.';
     }
+    // Filtra los IDs de categoría para asegurarse de que existan en la base de datos
     $idsCatValidos = array_map(fn($c) => (int)$c['id_categoria'], $categorias);
     $catsSel = array_values(array_intersect($catsSel, $idsCatValidos));
     if (!$catsSel) {
@@ -142,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$editando) {
             $estado = 'pendiente';
         } else {
+            // Si un autor edita un libro ya aprobado, pasa nuevamente a revisión
             $estado = $libro['estado'] === 'aprobado' ? 'pendiente' : $libro['estado'];
         }
     }
@@ -172,8 +180,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $tamanoMb = round(filesize(__DIR__ . '/../' . $rutaPdf) / 1048576, 2);
         }
         try {
+            // Inicia transacción para garantizar consistencia entre la tabla libros y libro_categoria
             $pdo->beginTransaction();
             if ($editando) {
+                // COALESCE conserva los archivos y tamaño previos si no se subieron reemplazos
                 $pdo->prepare(
                     'UPDATE libros SET titulo=?, isbn=?, sinopsis=?, fecha_publicacion=?, precio=?, copias_disponibles=?,
                             id_autor=?, id_editorial=?, estado=?,
@@ -215,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $estado === 'pendiente' ? 'Libro enviado a revisión. Aparecerá en el catálogo cuando sea aprobado.' : 'Libro creado correctamente.'));
             redirect('libros.php');
         } catch (PDOException $ex) {
+            // Si falla la base de datos, revierte cambios y limpia los archivos recién subidos
             if ($pdo->inTransaction()) $pdo->rollBack();
             borrar_subida($rutaPdf);
             borrar_subida($rutaPortada);
@@ -232,12 +243,14 @@ require __DIR__ . '/inc/header.php';
     <div class="card-body">
         <h2 class="h5 fw-bold mb-3"><?= $editando ? 'Editar libro #' . (int)$id : (!$esAdmin ? 'Publicar nueva obra' : 'Agregar libro') ?></h2>
 
+        <!-- Listado de errores de validación si los hubo -->
         <?php if ($errores): ?>
             <div class="alert alert-danger"><ul class="mb-0">
                 <?php foreach ($errores as $er): ?><li><?= e($er) ?></li><?php endforeach; ?>
             </ul></div>
         <?php endif; ?>
 
+        <!-- Formulario multipart para permitir la carga del PDF y la portada -->
         <form method="post" enctype="multipart/form-data" novalidate>
             <?= csrf_field() ?>
             <?php if ($editando): ?><input type="hidden" name="id_libro" value="<?= (int)$id ?>"><?php endif; ?>
@@ -252,6 +265,7 @@ require __DIR__ . '/inc/header.php';
                     <input name="isbn" class="form-control" maxlength="20" value="<?= e($f['isbn']) ?>">
                 </div>
 
+                <!-- Campos exclusivos del Administrador para asignar autor y estado inicial -->
                 <?php if ($esAdmin): ?>
                     <div class="col-md-6">
                         <label class="form-label">Autor *</label>
@@ -272,6 +286,7 @@ require __DIR__ . '/inc/header.php';
                     </div>
                 <?php endif; ?>
 
+                <!-- Selección múltiple de categorías literarias -->
                 <div class="col-md-6">
                     <label class="form-label">Categorías * <small class="text-muted">(una o varias)</small></label>
                     <div class="border rounded p-2 bg-white" style="max-height: 150px; overflow:auto;">
@@ -295,6 +310,7 @@ require __DIR__ . '/inc/header.php';
                     </select>
                 </div>
 
+                <!-- Metadatos comerciales y de inventario -->
                 <div class="col-md-4">
                     <label class="form-label">Fecha de publicación</label>
                     <input type="date" name="fecha_publicacion" class="form-control" value="<?= e($f['fecha_publicacion']) ?>">
@@ -308,6 +324,7 @@ require __DIR__ . '/inc/header.php';
                     <input type="number" min="0" name="copias_disponibles" class="form-control" value="<?= e($f['copias_disponibles']) ?>">
                 </div>
 
+                <!-- Ficha técnica de la obra -->
                 <div class="col-md-4">
                     <label class="form-label">Número de páginas</label>
                     <input type="number" min="1" name="num_paginas" class="form-control" value="<?= e((string)$f['num_paginas']) ?>">
@@ -330,6 +347,7 @@ require __DIR__ . '/inc/header.php';
                     <textarea name="sinopsis" rows="4" class="form-control"><?= e($f['sinopsis']) ?></textarea>
                 </div>
 
+                <!-- Carga de archivos digitales y vista previa de los actuales en modo edición -->
                 <div class="col-md-6">
                     <label class="form-label">Archivo PDF <?= $editando ? '<small class="text-muted">(déjalo vacío para conservar el actual)</small>' : '*' ?></label>
                     <input type="file" name="archivo_pdf" class="form-control" accept="application/pdf">
@@ -346,6 +364,7 @@ require __DIR__ . '/inc/header.php';
                 </div>
             </div>
 
+            <!-- Declaración obligatoria de derechos de autor para publicaciones de autores -->
             <?php if (!$esAdmin): ?>
                 <div class="form-check mt-3">
                     <input class="form-check-input" type="checkbox" name="declaro_derechos" value="1" id="declaro_derechos" required>

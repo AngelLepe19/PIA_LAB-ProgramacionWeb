@@ -1,38 +1,49 @@
 <?php
 declare(strict_types=1);
+/**
+ * Bandeja de mensajes enviados desde el formulario público de contacto.
+ * Permite a Administradores y Trabajadores filtrar consultas, responder por correo,
+ * marcarlas como atendidas o reabrirlas; solo el Administrador puede eliminarlas.
+ */
 require_once __DIR__ . '/inc/bootstrap.php';
 $u = require_rol(['Administrador', 'Trabajador']);
 $pdo = db();
 
+// Procesamiento de cambios de estado o eliminación de mensajes
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $accion = $_POST['accion'] ?? '';
     $id_mensaje = (int)($_POST['id_mensaje'] ?? 0);
 
     if ($id_mensaje > 0 && $accion === 'atender') {
+        // Registra qué trabajador o administrador atendió el mensaje y la hora exacta
         $st = $pdo->prepare("UPDATE mensajes_contacto 
                              SET estado = 'atendido', id_trabajador = ?, fecha_atencion = NOW() 
                              WHERE id_mensaje = ?");
         $st->execute([$u['id'], $id_mensaje]);
         flash('success', 'Mensaje marcado como atendido.');
     } elseif ($id_mensaje > 0 && $accion === 'reabrir') {
+        // Devuelve el mensaje a pendiente limpiando los datos de atención previa
         $st = $pdo->prepare("UPDATE mensajes_contacto 
                              SET estado = 'pendiente', id_trabajador = NULL, fecha_atencion = NULL 
                              WHERE id_mensaje = ?");
         $st->execute([$id_mensaje]);
         flash('success', 'Mensaje devuelto a estado pendiente.');
     } elseif ($id_mensaje > 0 && $accion === 'eliminar' && es_rol($u, 'Administrador')) {
+        // Eliminación definitiva reservada únicamente para el rol Administrador
         $st = $pdo->prepare("DELETE FROM mensajes_contacto WHERE id_mensaje = ?");
         $st->execute([$id_mensaje]);
         flash('success', 'Mensaje eliminado.');
     }
 
+    // Conserva los filtros activos tras procesar la acción
     redirect('mensajes.php?' . http_build_query([
         'estado' => $_POST['estado_filtro'] ?? 'pendiente',
         'q'      => $_POST['q_filtro'] ?? '',
     ]));
 }
 
+// Filtros GET por estado (pendiente por defecto) y texto libre
 $estado = (string)($_GET['estado'] ?? 'pendiente');
 $q = trim((string)($_GET['q'] ?? ''));
 $where = [];
@@ -49,10 +60,12 @@ if ($q !== '') {
 
 $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// Conteo total para paginación
 $st = $pdo->prepare("SELECT COUNT(*) FROM mensajes_contacto m $sqlWhere");
 $st->execute($params);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
+// Consulta paginada con LEFT JOIN hacia usuarios para mostrar quién atendió cada mensaje
 $sql = "SELECT m.*, u.nombre_completo AS atendido_por
         FROM mensajes_contacto m
         LEFT JOIN usuarios u ON m.id_trabajador = u.id_usuario
@@ -68,6 +81,7 @@ $tab = 'mensajes';
 require __DIR__ . '/inc/header.php';
 ?>
 
+<!-- Barra de filtros por palabra clave y estado -->
 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3 no-print">
     <form class="d-flex flex-wrap gap-2" method="get">
         <input type="search" name="q" value="<?= e($q) ?>" class="form-control form-control-sm" placeholder="Nombre, correo o asunto">
@@ -80,6 +94,7 @@ require __DIR__ . '/inc/header.php';
     </form>
 </div>
 
+<!-- Listado en tarjetas de los mensajes recibidos -->
 <?php if (!$mensajes): ?>
     <div class="alert alert-light border text-muted">No hay mensajes de contacto en esta vista.</div>
 <?php else: ?>
@@ -100,6 +115,7 @@ require __DIR__ . '/inc/header.php';
                             <?= badge_estado($m['estado']) ?>
                         </div>
 
+                        <!-- Cuerpo del mensaje respetando saltos de línea -->
                         <p class="mb-3 bg-light p-2 rounded border" style="white-space: pre-line;"><?= e($m['mensaje']) ?></p>
 
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -109,6 +125,7 @@ require __DIR__ . '/inc/header.php';
                                 <?php endif; ?>
                             </small>
 
+                            <!-- Botones de respuesta directa por correo y cambio de estado -->
                             <div class="d-flex gap-2 no-print">
                                 <a href="mailto:<?= e($m['correo']) ?>?subject=Re: <?= rawurlencode($m['asunto']) ?>" class="btn btn-sm btn-outline-primary">
                                     Responder por correo
