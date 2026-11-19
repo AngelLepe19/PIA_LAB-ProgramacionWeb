@@ -9,6 +9,10 @@ if (!isset($_SESSION['id_usuario']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $id_usuario = (int)$_SESSION['id_usuario'];
 
+// Método de pago que viene del checkout (solo valores conocidos)
+$metodos_validos = ['tarjeta', 'transferencia', 'paypal', 'gratuito'];
+$metodo_pago = in_array($_POST['metodo_pago'] ?? '', $metodos_validos, true) ? $_POST['metodo_pago'] : 'gratuito';
+
 // Transacción: se guarda todo el pedido o no se guarda nada
 $conn->begin_transaction();
 try {
@@ -46,8 +50,12 @@ try {
     }
 
     // 2. Crear el pedido (queda 'completado' hasta que se descargue)
-    $stmt_ped = $conn->prepare("INSERT INTO pedidos (id_usuario, total, estado) VALUES (?, ?, 'completado')");
-    $stmt_ped->bind_param("id", $id_usuario, $total);
+    // Si el total es 0 se guarda como gratuito aunque hayan mandado otro método
+    if ($total == 0) {
+        $metodo_pago = 'gratuito';
+    }
+    $stmt_ped = $conn->prepare("INSERT INTO pedidos (id_usuario, total, metodo_pago, estado) VALUES (?, ?, ?, 'completado')");
+    $stmt_ped->bind_param("ids", $id_usuario, $total, $metodo_pago);
     $stmt_ped->execute();
     $id_pedido = $stmt_ped->insert_id;
     $stmt_ped->close();
