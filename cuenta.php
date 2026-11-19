@@ -1,9 +1,3 @@
-<!--
-  Archivo base de cuenta y navegación de LecturaLibre.
-  Conserva la estructura inicial del encabezado, el menú responsivo, la ventana
-  modal para iniciar sesión, registrarse o recuperar contraseña mediante funciones
-  de JavaScript (main.js) y el pie de página general.
--->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -15,21 +9,18 @@
 </head>
 <body>
 
-    <!-- Encabezado principal con el logotipo, buscador y enlaces de navegación -->
     <header>
         <div class="container navbar">
             <a href="javascript:void(0)" class="logo" onclick="window.location.href='index.html'">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <!-- Botón desplegable para mostrar u ocultar el menú en pantallas pequeñas -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
 
-            <!-- Barra de búsqueda rápida que envía el término escrito hacia catalogo.php -->
             <form class="search-bar" action="catalogo.php" method="get" role="search">
                 <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
                        placeholder="Buscar libros…">
@@ -44,14 +35,11 @@
                     <li><a href="javascript:void(0)" id="link-catalogo" onclick="window.location.href='catalogo.html'">Catálogo</a></li>
                     <li><a href="javascript:void(0)" id="link-nosotros" onclick="window.location.href='nosotros.html'">Nosotros</a></li>
                     <li><a href="javascript:void(0)" id="link-contacto" onclick="window.location.href='contacto.html'">Contacto</a></li>
-
-                    <!-- Enlaces a los paneles de gestión; inician ocultos y se muestran según el rol activo -->
                     <li id="author-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-author-dashboard" onclick="window.location.href='panelautor.html'">Panel Autor</a></li>
                     <li id="worker-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-worker-dashboard" onclick="window.location.href='paneltrabajador.html'">Panel Trabajador</a></li>
                     <li id="admin-nav-item" style="display: none;"><a href="javascript:void(0)" id="link-admin-dashboard" onclick="window.location.href='paneladmin.html'">Panel Admin</a></li>
                 </ul>
 
-                <!-- Botones del carrito y control de acceso (visitante vs usuario conectado) -->
                 <div class="user-actions">
                     <button class="btn" onclick="window.location.href='carrito.html'"><i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge">0</span></button>
                     <div id="auth-buttons">
@@ -67,12 +55,10 @@
         </div>
     </header>
 
-    <!-- Ventana modal que agrupa los tres formularios de cuenta y alterna entre ellos con toggleAuthMode() -->
-    <div class="modal-overlay" id="authModal">
+         <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
             
-            <!-- Formulario de inicio de sesión con selector de rol para pruebas de interfaz -->
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <h3 style="margin-bottom: 15px;">Iniciar Sesión</h3>
                 <div class="form-group">
@@ -97,7 +83,6 @@
                 <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
             </form>
 
-            <!-- Formulario de registro de cuenta nueva -->
             <form id="signupForm" style="display: none;" onsubmit="handleSignUp(event)">
                 <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
                 <div class="form-group">
@@ -129,7 +114,6 @@
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <!-- Formulario para solicitar el enlace de recuperación de contraseña -->
             <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
@@ -143,7 +127,6 @@
         </div>
     </div>
 
-    <!-- Pie de página; el año actual se rellena automáticamente desde main.js en #footer-year -->
     <footer>
     <div class="container footer-cols">
         <div>

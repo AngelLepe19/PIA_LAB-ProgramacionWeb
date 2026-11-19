@@ -1,21 +1,14 @@
 <?php
-/*
- * Página principal de LecturaLibre.
- * Carga la sesión del usuario, muestra alertas de acceso/registro,
- * lista los libros destacados o resultados de búsqueda y contiene los modales de autenticación.
- */
-
 session_start();
 require_once 'config/conexion.php';
 
-// Datos básicos de la página y la sesión activa
-$pagina_actual  = basename($_SERVER['PHP_SELF']);
-$busqueda       = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$logueado       = isset($_SESSION['id_usuario']);
-$id_rol         = $logueado ? (int)$_SESSION['id_rol'] : 0;
+$pagina_actual = basename($_SERVER['PHP_SELF']);
+$busqueda = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+$logueado = isset($_SESSION['id_usuario']);
+$id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar cuántos libros tiene el usuario en su carrito
+// Contar libros en el carrito real del usuario
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -26,21 +19,20 @@ if ($logueado) {
     $stmt_cart->close();
 }
 
-// Mensajes de alerta según los parámetros recibidos por URL
-$alerta_texto      = '';
+// Mensajes de aviso tras login, registro o recuperación de contraseña
+$alerta_texto = '';
 $alerta_html_extra = '';
-$alerta_tipo       = ''; // 'exito' o 'error'
+$alerta_tipo = '';
 
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
-    $alerta_tipo  = 'exito';
+    $alerta_tipo = 'exito';
 } elseif (isset($_GET['registro']) && $_GET['registro'] === 'autor') {
     $alerta_texto = '¡Cuenta de autor creada! Entra a "Panel Autor" para publicar tu primer libro.';
-    $alerta_tipo  = 'exito';
+    $alerta_tipo = 'exito';
 } elseif (isset($_GET['recuperar']) && $_GET['recuperar'] === 'enviado') {
     $alerta_texto = 'Si el correo está registrado, se ha generado un enlace de restablecimiento (válido por 1 hora).';
-    $alerta_tipo  = 'exito';
-    // En entorno local mostramos el enlace directo para poder probar sin servidor de correo
+    $alerta_tipo = 'exito';
     if (!empty($_SESSION['link_recuperacion_demo'])) {
         $link_demo = htmlspecialchars($_SESSION['link_recuperacion_demo']);
         $alerta_html_extra = ' <a href="' . $link_demo . '" style="font-weight:bold; text-decoration:underline;">Abrir enlace de recuperación</a>';
@@ -48,7 +40,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     }
 } elseif (isset($_GET['restablecido']) && $_GET['restablecido'] === 'exitoso') {
     $alerta_texto = 'Tu contraseña ha sido actualizada. Ya puedes iniciar sesión.';
-    $alerta_tipo  = 'exito';
+    $alerta_tipo = 'exito';
 } elseif (isset($_GET['error'])) {
     $alerta_tipo = 'error';
     switch ($_GET['error']) {
@@ -90,14 +82,12 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
 </head>
 <body>
 
-    <!-- Barra de navegación principal -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
-            <!-- Menú móvil desplegable sin depender de JS -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
@@ -119,7 +109,6 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
-                    <!-- Accesos extra según el rol del usuario (2: Autor, 3: Trabajador, 4: Admin) -->
                     <?php if ($id_rol === 2): ?>
                         <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
                     <?php elseif ($id_rol === 3): ?>
@@ -154,7 +143,6 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         </div>
     </header>
 
-    <!-- Banner de notificaciones -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
@@ -165,7 +153,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
 
     <main class="container">
         <?php
-        // Obtenemos los IDs de favoritos y libros ya adquiridos por el usuario para reflejarlo en las tarjetas
+        // Obtener IDs de favoritos del usuario actual (si inició sesión)
         $mis_favoritos = [];
         if ($logueado) {
             $stmt_fav = $conn->prepare("SELECT id_libro FROM favoritos WHERE id_usuario = ?");
@@ -177,7 +165,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             }
             $stmt_fav->close();
         }
-
+        // Libros que el usuario ya compró (no se pueden volver a agregar al carrito)
         $mis_comprados = [];
         if ($logueado) {
             $stmt_comp = $conn->prepare("
@@ -191,7 +179,7 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             $stmt_comp->close();
         }
 
-        // Consulta de libros aprobados; el promedio solo toma en cuenta reseñas ya aprobadas
+        // Consultar libros aprobados desde MySQL
         $sql_libros = "
             SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor,
                    ROUND(AVG(CASE WHEN r.estado = 'aprobada' THEN r.puntuacion END), 1) AS promedio
@@ -217,11 +205,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             ORDER BY l.fecha_alta DESC
         ";
 
-        // Sin búsqueda mostramos solo los 4 más recientes; con búsqueda usamos consulta preparada
         if ($busqueda === '') {
             $res_libros = $conn->query($sql_libros . " LIMIT 4");
         } else {
-            // Escapamos comodines SQL para evitar coincidencias inesperadas en el LIKE
             $patron = '%' . strtr($busqueda, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
             $stmt_libros = $conn->prepare($sql_libros);
             $stmt_libros->bind_param("sss", $patron, $patron, $patron);
@@ -231,7 +217,6 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         }
         ?>
 
-        <!-- Banner principal y catálogo destacado -->
         <section id="inicio">
             <div class="hero">
                 <div class="hero-content">
@@ -248,13 +233,12 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             <?php if ($busqueda !== '' && $res_libros && $res_libros->num_rows > 0): ?>
                 <p><a class="search-clear" href="index.php">Limpiar búsqueda</a></p>
             <?php endif; ?>
-
             <div class="book-grid" id="featured-books">
                 <?php if ($res_libros && $res_libros->num_rows > 0): ?>
                     <?php while ($libro = $res_libros->fetch_assoc()): ?>
                         <?php
-                        $id_lib       = (int)$libro['id_libro'];
-                        $es_fav       = in_array($id_lib, $mis_favoritos, true);
+                        $id_lib = (int)$libro['id_libro'];
+                        $es_fav = in_array($id_lib, $mis_favoritos, true);
                         $rating_texto = $libro['promedio'] !== null ? $libro['promedio'] : 'Nuevo';
                         $precio_texto = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
                         ?>
@@ -263,7 +247,6 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
                                 <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
                             </a>
 
-                            <!-- Validamos que la imagen exista en el servidor antes de renderizarla -->
                             <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
                                 <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
                             <?php else: ?>
@@ -304,95 +287,94 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         </section>
     </main>
 
-    <!-- Modal de autenticación (Login, Registro y Recuperación de contraseña) -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
-
-            <!-- Formulario de inicio de sesión -->
+            
             <form id="loginForm" action="auth/login.php" method="POST">
-                <h2>Iniciar Sesión</h2>
+                <h3 style="margin-bottom: 15px;">Iniciar Sesión</h3>
                 <div class="form-group">
-                    <label for="login-email">Correo electrónico</label>
-                    <input type="email" id="login-email" name="correo" required placeholder="tu@correo.com">
+                    <label>Correo Electrónico</label>
+                    <input type="email" name="correo" id="login-email" placeholder="usuario@correo.com" required>
                 </div>
                 <div class="form-group">
-                    <label for="login-pass">Contraseña</label>
-                    <input type="password" id="login-pass" name="password" required placeholder="••••••••">
+                    <label>Contraseña</label>
+                    <input type="password" name="password" placeholder="••••••••" required>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Entrar</button>
-                <p style="margin-top: 12px; font-size: 0.85rem; text-align: center;">
-                    <a href="#" onclick="openAuthModal('recover'); return false;">¿Olvidaste tu contraseña?</a>
-                </p>
-                <p style="margin-top: 8px; font-size: 0.85rem; text-align: center;">
-                    ¿No tienes cuenta? <a href="#" onclick="openAuthModal('signup'); return false;">Regístrate aquí</a>
-                </p>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Ingresar</button>
+                <p class="auth-toggle">¿Olvidaste tu contraseña? <a onclick="toggleAuthMode('recover')">Recuperar aquí</a></p>
+                <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
             </form>
 
-            <!-- Formulario de registro -->
-            <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;">
-                <h2>Crear Cuenta</h2>
+            <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
+                <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
                 <div class="form-group">
-                    <label for="reg-nombre">Nombre completo</label>
-                    <input type="text" id="reg-nombre" name="nombre_completo" required placeholder="Ej. Ana López">
+                    <label>Nombre Completo</label>
+                    <input type="text" name="nombre_completo" id="signup-name" placeholder="Tu Nombre" required>
                 </div>
                 <div class="form-group">
-                    <label for="reg-email">Correo electrónico</label>
-                    <input type="email" id="reg-email" name="correo" required placeholder="tu@correo.com">
+                    <label>Correo Electrónico</label>
+                    <input type="email" name="correo" id="signup-email" placeholder="usuario@correo.com" required>
                 </div>
                 <div class="form-group">
-                    <label for="reg-pass">Contraseña</label>
-                    <input type="password" id="reg-pass" name="password" required minlength="6" placeholder="Mínimo 6 caracteres">
+                    <label for="signup-password">Contraseña</label>
+                    <input type="password" name="password" id="signup-password" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
                 <div class="form-group">
-                    <label for="reg-rol">Tipo de cuenta</label>
-                    <select id="reg-rol" name="id_rol">
-                        <option value="1">Lector</option>
-                        <option value="2">Autor (publicar libros)</option>
+                    <label for="signup-password-confirm">Confirmar contraseña</label>
+                    <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
+                </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
                     </select>
                 </div>
-                <div class="form-group" style="display: flex; align-items: flex-start; gap: 8px;">
-                    <input type="checkbox" id="reg-terminos" name="terminos" value="1" required style="width: auto; margin-top: 4px;">
-                    <label for="reg-terminos" style="font-size: 0.82rem; font-weight: normal;">
-                        Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.
-                    </label>
-                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
-                <p style="margin-top: 12px; font-size: 0.85rem; text-align: center;">
-                    ¿Ya tienes cuenta? <a href="#" onclick="openAuthModal('login'); return false;">Inicia sesión</a>
-                </p>
+                <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <!-- Formulario de recuperación de contraseña -->
             <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
-                <h2>Recuperar Contraseña</h2>
-                <p style="font-size: 0.85rem; color: var(--wf-gray); margin-bottom: 12px;">
-                    Ingresa tu correo y te enviaremos un enlace para restablecer tu clave.
-                </p>
+                <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
+                <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
-                    <label for="rec-email">Correo electrónico</label>
-                    <input type="email" id="rec-email" name="correo" required placeholder="tu@correo.com">
+                    <label>Correo Electrónico</label>
+                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar enlace</button>
-                <p style="margin-top: 12px; font-size: 0.85rem; text-align: center;">
-                    <a href="#" onclick="openAuthModal('login'); return false;">Volver a iniciar sesión</a>
-                </p>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
+                <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
             </form>
         </div>
     </div>
 
-    <!-- Pie de página -->
     <footer>
-        <div class="container">
-            <p>&copy; <?= date('Y') ?> LecturaLibre - Plataforma de Lectura Digital Gratuita.</p>
-            <div style="margin-top: 8px; font-size: 0.85rem;">
-                <a href="nosotros.php">Nosotros</a> |
-                <a href="contacto.php">Contacto</a> |
-                <a href="terminos.php">Términos de uso</a> |
-                <a href="privacidad.php">Aviso de privacidad</a>
+        <div class="container footer-cols">
+            <div>
+                <h4>LecturaLibre</h4>
+                <p style="font-size: 0.85rem;">Plataforma de lectura digital libre.</p>
+                <p style="font-size: 0.85rem;">&copy; <?= date('Y') ?> LecturaLibre</p>
             </div>
+
+            <nav aria-label="Navegación del pie de página">
+                <h4>Navegación</h4>
+                <p style="font-size: 0.85rem;">
+                    <a href="index.php">Inicio</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="catalogo.php">Catálogo</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
+                </p>
+            </nav>
         </div>
     </footer>
-
 </body>
 </html>
