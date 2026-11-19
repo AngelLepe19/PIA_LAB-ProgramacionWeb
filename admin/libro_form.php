@@ -62,7 +62,6 @@ $f = [
     'sinopsis'           => $libro['sinopsis'] ?? '',
     'fecha_publicacion'  => $libro['fecha_publicacion'] ?? '',
     'precio'             => $libro['precio'] ?? '0.00',
-    'copias_disponibles' => $libro['copias_disponibles'] ?? 100,
     'id_editorial'       => $libro['id_editorial'] ?? '',
     'id_autor'           => $libro['id_autor'] ?? '',
     'estado'             => $libro['estado'] ?? 'aprobado',
@@ -82,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f['sinopsis']           = trim((string)($_POST['sinopsis'] ?? ''));
     $f['fecha_publicacion']  = trim((string)($_POST['fecha_publicacion'] ?? ''));
     $f['precio']             = trim((string)($_POST['precio'] ?? '0'));
-    $f['copias_disponibles'] = trim((string)($_POST['copias_disponibles'] ?? '0'));
     $f['id_editorial']       = (string)($_POST['id_editorial'] ?? '');
     $f['num_paginas']        = trim((string)($_POST['num_paginas'] ?? ''));
     $f['idioma']             = trim((string)($_POST['idioma'] ?? ''));
@@ -104,9 +102,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!is_numeric($f['precio']) || (float)$f['precio'] < 0 || (float)$f['precio'] > 99999999) {
         $errores[] = 'El precio debe ser un número mayor o igual a 0 (usa 0 para libros gratuitos).';
-    }
-    if (!ctype_digit($f['copias_disponibles'])) {
-        $errores[] = 'Las copias disponibles deben ser un número entero mayor o igual a 0.';
     }
     if ($f['num_paginas'] !== '' && (!ctype_digit($f['num_paginas']) || (int)$f['num_paginas'] < 1 || (int)$f['num_paginas'] > 100000)) {
         $errores[] = 'El número de páginas debe ser un número entero mayor a 0.';
@@ -149,8 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$editando) {
             $estado = 'pendiente';
         } else {
-            // Si un autor edita un libro ya aprobado, pasa nuevamente a revisión
-            $estado = $libro['estado'] === 'aprobado' ? 'pendiente' : $libro['estado'];
+            // Si un autor edita un libro aprobado o rechazado, pasa nuevamente a revisión
+            $estado = in_array($libro['estado'], ['aprobado', 'rechazado'], true) ? 'pendiente' : $libro['estado'];
         }
     }
     $f['id_autor'] = $idAutor;
@@ -185,13 +180,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($editando) {
                 // COALESCE conserva los archivos y tamaño previos si no se subieron reemplazos
                 $pdo->prepare(
-                    'UPDATE libros SET titulo=?, isbn=?, sinopsis=?, fecha_publicacion=?, precio=?, copias_disponibles=?,
+                    'UPDATE libros SET titulo=?, isbn=?, sinopsis=?, fecha_publicacion=?, precio=?,
                             id_autor=?, id_editorial=?, estado=?,
                             num_paginas=?, idioma=?, clasificacion_edad=?,
                             archivo_pdf = COALESCE(?, archivo_pdf), portada = COALESCE(?, portada),
                             tamano_archivo_mb = COALESCE(?, tamano_archivo_mb)
                       WHERE id_libro=?'
-                )->execute([$f['titulo'], $isbn, $f['sinopsis'] ?: null, $fecha, $f['precio'], (int)$f['copias_disponibles'],
+                )->execute([$f['titulo'], $isbn, $f['sinopsis'] ?: null, $fecha, $f['precio'],
                             $idAutor, $idEditorial, $estado,
                             $numPaginas, $f['idioma'], $f['clasificacion_edad'],
                             $rutaPdf, $rutaPortada, $tamanoMb, $id]);
@@ -199,11 +194,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $pdo->prepare(
                     'INSERT INTO libros (titulo, isbn, sinopsis, fecha_publicacion, portada, archivo_pdf, precio,
-                                         copias_disponibles, lecturas_acumuladas, estado, id_autor, id_editorial,
+                                         lecturas_acumuladas, estado, id_autor, id_editorial,
                                          num_paginas, idioma, tamano_archivo_mb, clasificacion_edad, fecha_alta)
-                     VALUES (?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,NOW())'
+                     VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,NOW())'
                 )->execute([$f['titulo'], $isbn, $f['sinopsis'] ?: null, $fecha, $rutaPortada, $rutaPdf, $f['precio'],
-                            (int)$f['copias_disponibles'], $estado, $idAutor, $idEditorial,
+                            $estado, $idAutor, $idEditorial,
                             $numPaginas, $f['idioma'], $tamanoMb, $f['clasificacion_edad']]);
                 $idLibro = (int)$pdo->lastInsertId();
             }
@@ -242,6 +237,14 @@ require __DIR__ . '/inc/header.php';
 <div class="card shadow-sm">
     <div class="card-body">
         <h2 class="h5 fw-bold mb-3"><?= $editando ? 'Editar libro #' . (int)$id : (!$esAdmin ? 'Publicar nueva obra' : 'Agregar libro') ?></h2>
+
+        <!-- Si el libro fue rechazado, el autor ve el motivo para corregirlo -->
+        <?php if ($editando && $libro['estado'] === 'rechazado' && !empty($libro['motivo_rechazo'])): ?>
+            <div class="alert alert-warning">
+                <strong>Este libro fue rechazado.</strong> Motivo: <?= e($libro['motivo_rechazo']) ?>
+                <?php if (!$esAdmin): ?><br><small>Corrige lo necesario y guarda; se enviará otra vez a revisión.</small><?php endif; ?>
+            </div>
+        <?php endif; ?>
 
         <!-- Listado de errores de validación si los hubo -->
         <?php if ($errores): ?>
@@ -311,17 +314,13 @@ require __DIR__ . '/inc/header.php';
                 </div>
 
                 <!-- Metadatos comerciales y de inventario -->
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Fecha de publicación</label>
                     <input type="date" name="fecha_publicacion" class="form-control" value="<?= e($f['fecha_publicacion']) ?>">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Precio ($) <small class="text-muted">0 = gratis</small></label>
                     <input type="number" step="0.01" min="0" name="precio" class="form-control" value="<?= e($f['precio']) ?>">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Copias disponibles</label>
-                    <input type="number" min="0" name="copias_disponibles" class="form-control" value="<?= e($f['copias_disponibles']) ?>">
                 </div>
 
                 <!-- Ficha técnica de la obra -->
@@ -383,4 +382,4 @@ require __DIR__ . '/inc/header.php';
         </form>
     </div>
 </div>
-<?php require __DIR__ . '/inc/footer.php'; ?>
+<?php require __DIR__ . '/inc/footer.php'; ?>
