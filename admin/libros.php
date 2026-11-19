@@ -54,9 +54,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
             $nuevo = $accion === 'aprobar' ? 'aprobado' : 'rechazado';
-            // Guarda el estado, el identificador del revisor y la fecha de revisión
-            $pdo->prepare('UPDATE libros SET estado = ?, id_revisor = ?, fecha_revision = NOW() WHERE id_libro = ?')
-                ->execute([$nuevo, $u['id'], $idLibro]);
+            // Al rechazar es obligatorio el motivo; al aprobar se borra el anterior
+            $motivo = null;
+            if ($nuevo === 'rechazado') {
+                $motivo = trim((string)($_POST['motivo'] ?? ''));
+                if (mb_strlen($motivo) < 5) {
+                    flash('warning', 'Escribe el motivo del rechazo (mínimo 5 caracteres) para que el autor sepa qué corregir.');
+                    break;
+                }
+                $motivo = mb_substr($motivo, 0, 255);
+            }
+            // Guarda el estado, el revisor, la fecha y el motivo
+            $pdo->prepare('UPDATE libros SET estado = ?, id_revisor = ?, fecha_revision = NOW(), motivo_rechazo = ? WHERE id_libro = ?')
+                ->execute([$nuevo, $u['id'], $motivo, $idLibro]);
             flash('success', 'Libro ' . ($nuevo === 'aprobado' ? 'aprobado.' : 'rechazado.'));
             break;
 
@@ -112,8 +122,8 @@ $st->execute($params);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
 // Consulta principal con subconsultas para concatenar categorías y contar descargas por libro
-$sql = "SELECT l.id_libro, l.titulo, l.isbn, l.precio, l.copias_disponibles, l.lecturas_acumuladas,
-               l.estado, l.portada, l.archivo_pdf, a.nombre_artistico AS autor,
+$sql = "SELECT l.id_libro, l.titulo, l.isbn, l.precio, l.lecturas_acumuladas,
+               l.estado, l.motivo_rechazo, l.portada, l.archivo_pdf, a.nombre_artistico AS autor,
                (SELECT GROUP_CONCAT(c.nombre ORDER BY c.nombre SEPARATOR ', ')
                   FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
                  WHERE lc.id_libro = l.id_libro) AS categorias,
@@ -176,7 +186,15 @@ require __DIR__ . '/inc/header.php';
             <td><?= $l['categorias'] ? e($l['categorias']) : '<span class="text-muted">—</span>' ?></td>
             <td><?= (int)$l['descargas'] ?></td>
             <td><?= (int)$l['lecturas_acumuladas'] ?></td>
-            <td><?= badge_estado($l['estado']) ?></td>
+            <td>
+                <?= badge_estado($l['estado']) ?>
+                <?php if ($l['estado'] === 'rechazado' && $l['motivo_rechazo']): ?>
+                    <div class="small text-danger mt-1" style="max-width: 220px;">Motivo: <?= e($l['motivo_rechazo']) ?></div>
+                    <?php if (es_rol($u, 'Autor')): ?>
+                        <div class="small text-muted">Corrígelo con "Editar" y se enviará otra vez a revisión.</div>
+                    <?php endif; ?>
+                <?php endif; ?>
+            </td>
             <td class="text-end text-nowrap">
                 <form method="post" class="d-inline">
                     <?= csrf_field() ?>
@@ -184,13 +202,14 @@ require __DIR__ . '/inc/header.php';
                     <input type="hidden" name="q" value="<?= e($q) ?>">
                     <input type="hidden" name="estado" value="<?= e($estado) ?>">
                     <input type="hidden" name="p" value="<?= (int)$pagina ?>">
+                    <input type="hidden" name="motivo" value="">
 
                     <!-- Botones de moderación para Administrador y Trabajador -->
                     <?php if ($puedeRevisar && in_array($l['estado'], ['pendiente', 'rechazado'], true)): ?>
                         <button name="accion" value="aprobar" class="btn btn-sm btn-success">Aprobar</button>
                     <?php endif; ?>
                     <?php if ($puedeRevisar && $l['estado'] === 'pendiente'): ?>
-                        <button name="accion" value="rechazar" class="btn btn-sm btn-outline-danger">Rechazar</button>
+                        <button name="accion" value="rechazar" class="btn btn-sm btn-outline-danger" onclick="return pedirMotivo(this)">Rechazar</button>
                     <?php endif; ?>
 
                     <!-- Botones de edición y baja/reactivación para Administrador y Autor -->
@@ -212,4 +231,18 @@ require __DIR__ . '/inc/header.php';
 </div>
 <?= paginacion_html($pagina, $paginas) ?>
 
-<?php require __DIR__ . '/inc/footer.php'; ?>
+<script>
+// Pide el motivo antes de rechazar y lo manda en el campo oculto "motivo"
+function pedirMotivo(boton) {
+    const motivo = prompt('¿Por qué se rechaza este libro? El autor podrá ver este motivo.');
+    if (motivo === null) return false;
+    if (motivo.trim().length < 5) {
+        alert('Escribe un motivo de al menos 5 caracteres.');
+        return false;
+    }
+    boton.form.motivo.value = motivo.trim();
+    return true;
+}
+</script>
+
+<?php require __DIR__ . '/inc/footer.php'; ?>
