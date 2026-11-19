@@ -107,6 +107,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errores[] = 'La editorial seleccionada no existe.';
     }
 
+    // El autor debe declarar que la obra es suya (ver terminos.php)
+    if (!$esAdmin && empty($_POST['declaro_derechos'])) {
+        $errores[] = 'Debes declarar que tienes los derechos de la obra para publicarla.';
+    }
+
     // Autor y estado según el rol
     if ($esAdmin) {
         $idAutor = (int)($_POST['id_autor'] ?? 0);
@@ -291,11 +296,21 @@ require __DIR__ . '/inc/header.php';
                 <div class="col-md-6">
                     <label class="form-label">Portada <small class="text-muted">(JPG, PNG o WEBP)</small></label>
                     <input type="file" name="portada" class="form-control" accept="image/jpeg,image/png,image/webp">
+                    <?php if ($editando && $libro['portada']): ?>
+                        <div class="form-text">Actual: <img src="../<?= e($libro['portada']) ?>" alt="" style="height: 60px; vertical-align: middle;"></div>
+                    <?php endif; ?>
                 </div>
             </div>
 
             <?php if (!$esAdmin): ?>
-                <p class="small text-muted mt-3 mb-0">Tu libro será revisado por un Trabajador o Administrador antes de aparecer en el catálogo.</p>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" name="declaro_derechos" value="1" id="declaro_derechos" required>
+                    <label class="form-check-label small" for="declaro_derechos">
+                        Declaro que soy el autor de esta obra o que tengo los derechos para publicarla, y acepto los
+                        <a href="../terminos.php" target="_blank">Términos de uso</a>.
+                    </label>
+                </div>
+                <p class="small text-muted mt-2 mb-0">Tu libro será revisado por un Trabajador o Administrador antes de aparecer en el catálogo.</p>
             <?php endif; ?>
 
             <div class="mt-4 d-flex gap-2">
