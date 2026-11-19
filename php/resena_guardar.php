@@ -25,6 +25,20 @@ if ($puntuacion < 1 || $puntuacion > 5 || $comentario === '' || mb_strlen($comen
     exit;
 }
 
+// Solo reseñan quienes compraron el libro
+$stmt_v = $conn->prepare("
+    SELECT 1 FROM pedidos p
+    INNER JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
+    WHERE p.id_usuario = ? AND dp.id_libro = ? AND p.estado <> 'cancelado' LIMIT 1
+");
+$stmt_v->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
+$stmt_v->execute();
+if ($stmt_v->get_result()->num_rows === 0) {
+    header("Location: ../detalle.php?id=" . $id_libro . "&error=resena_sin_compra");
+    exit;
+}
+$stmt_v->close();
+
 // El libro debe existir y estar aprobado
 $stmt = $conn->prepare("SELECT 1 FROM libros WHERE id_libro = ? AND estado = 'aprobado'");
 $stmt->bind_param("i", $id_libro);

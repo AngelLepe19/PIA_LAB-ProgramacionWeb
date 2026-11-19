@@ -48,6 +48,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         case 'resena_invalida':
             $alerta_texto = 'La reseña necesita calificación de 1 a 5 y un comentario de máximo 500 caracteres.';
             break;
+            case 'resena_sin_compra':
+                $alerta_texto = 'Solo puedes reseñar libros que hayas comprado.';
+                break;
         case 'resena_duplicada':
             $alerta_texto = 'Ya escribiste una reseña para este libro.';
             break;
@@ -61,7 +64,8 @@ $id_libro = (int)($_GET['id'] ?? 0);
 
 // Datos del libro con su autor, editorial, categorías y promedio de reseñas aprobadas
 $stmt = $conn->prepare("
-    SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas, l.portada,
+    SELECT l.id_libro, l.id_autor, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas, l.portada,
+       l.num_paginas, l.idioma, l.tamano_archivo_mb, l.clasificacion_edad,
            a.nombre_artistico AS autor, a.biografia, e.nombre AS editorial,
            (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
               FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
@@ -82,7 +86,12 @@ $stmt->close();
 $resenas = [];
 if ($libro) {
     $stmt_r = $conn->prepare("
-        SELECT r.puntuacion, r.comentario, r.fecha_creacion, u.nombre_completo
+        SELECT r.puntuacion, r.comentario, r.fecha_creacion, u.nombre_completo,
+       EXISTS (
+           SELECT 1 FROM pedidos p
+           INNER JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
+           WHERE p.id_usuario = r.id_usuario AND dp.id_libro = r.id_libro AND p.estado <> 'cancelado'
+       ) AS compra_verificada
         FROM resenas r
         INNER JOIN usuarios u ON r.id_usuario = u.id_usuario
         WHERE r.id_libro = ? AND r.estado = 'aprobada'
@@ -227,7 +236,9 @@ if ($logueado && $libro) {
 
                 <div style="flex: 1; min-width: 250px;">
                     <h2><?= htmlspecialchars($libro['titulo']) ?></h2>
-                    <p><strong>Autor:</strong> <?= htmlspecialchars($libro['autor']) ?></p>
+                    <p><strong>Autor:</strong>
+    <a href="autor.php?id=<?= (int)$libro['id_autor'] ?>"><?= htmlspecialchars($libro['autor']) ?></a>
+</p>
                     <p><strong>Categorías:</strong> <?= htmlspecialchars($libro['categorias'] ?? 'Sin categoría') ?></p>
                     <?php if ($libro['editorial']): ?>
                         <p><strong>Editorial:</strong> <?= htmlspecialchars($libro['editorial']) ?></p>
@@ -238,6 +249,22 @@ if ($logueado && $libro) {
                     <?php if ($libro['isbn']): ?>
                         <p><strong>ISBN:</strong> <?= htmlspecialchars($libro['isbn']) ?></p>
                     <?php endif; ?>
+                    <?php
+$edades = ['ninos' => 'Niños', 'jovenes' => 'Jóvenes', 'adultos' => 'Adultos'];
+$edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
+?>
+<?php if (!empty($libro['num_paginas'])): ?>
+<p><strong>Páginas:</strong> <?= (int)$libro['num_paginas'] ?></p>
+<?php endif; ?>
+<?php if (!empty($libro['idioma'])): ?>
+<p><strong>Idioma:</strong> <?= htmlspecialchars($libro['idioma']) ?></p>
+<?php endif; ?>
+<?php if ($libro['tamano_archivo_mb'] !== null): ?>
+<p><strong>Tamaño del archivo:</strong> <?= number_format((float)$libro['tamano_archivo_mb'], 2) ?> MB</p>
+<?php endif; ?>
+<p><strong>Clasificación por edad:</strong>
+    <span style="background:#eef2ff;color:#3730a3;padding:2px 10px;border-radius:12px;font-size:0.8rem;"><?= $edad_texto ?></span>
+</p>
                     <div class="stars">⭐ <?= $libro['promedio'] ?? 'Sin reseñas' ?> (<?= count($resenas) ?> reseñas)</div>
 
                     <p style="margin: 15px 0;"><?= nl2br(htmlspecialchars($libro['sinopsis'] ?? '')) ?></p>
@@ -278,6 +305,11 @@ if ($logueado && $libro) {
                 <?php foreach ($resenas as $r): ?>
                     <div style="background: var(--wf-bg); padding: 10px; border-radius: var(--radius); margin-bottom: 10px;">
                         <strong><?= htmlspecialchars($r['nombre_completo']) ?></strong>
+<?php if (!empty($r['compra_verificada'])): ?>
+<span style="background:#d4edda;color:#155724;font-size:0.75rem;padding:2px 8px;border-radius:12px;margin-left:4px;">
+    <i class="fa-solid fa-circle-check"></i> Compra verificada
+</span>
+<?php endif; ?>
                         - <?= str_repeat('⭐', (int)$r['puntuacion']) ?>
                         <small style="color: var(--wf-gray);"><?= date('d/m/Y', strtotime($r['fecha_creacion'])) ?></small>
                         <p><?= nl2br(htmlspecialchars($r['comentario'])) ?></p>
@@ -291,7 +323,9 @@ if ($logueado && $libro) {
             <!-- Formulario de reseña (se guarda en php/resena_guardar.php) -->
             <?php if (!$logueado): ?>
                 <p style="color: var(--wf-gray);"><em>Inicia sesión para escribir una reseña.</em></p>
-            <?php elseif ($mi_resena): ?>
+            <?php elseif ($pedido_comprado === 0): ?>
+<p style="color: var(--wf-gray);"><em>Solo quienes compraron este libro pueden escribir una reseña.</em></p>
+<?php elseif ($mi_resena): ?>
                 <p style="color: var(--wf-gray);"><em>Ya enviaste tu reseña de este libro (estado: <?= htmlspecialchars($mi_resena['estado']) ?>).</em></p>
             <?php else: ?>
                 <h4>Escribir una reseña</h4>
@@ -407,4 +441,4 @@ if ($logueado && $libro) {
         </div>
     </footer>
 </body>
-</html>
+</html>

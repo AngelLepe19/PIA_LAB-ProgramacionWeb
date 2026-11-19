@@ -62,6 +62,9 @@ $f = [
     'id_editorial'       => $libro['id_editorial'] ?? '',
     'id_autor'           => $libro['id_autor'] ?? '',
     'estado'             => $libro['estado'] ?? 'aprobado',
+    'num_paginas'        => $libro['num_paginas'] ?? '',
+    'idioma'             => $libro['idioma'] ?? 'Español',
+    'clasificacion_edad' => $libro['clasificacion_edad'] ?? 'adultos',
 ];
 $errores = [];
 
@@ -75,6 +78,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f['precio']             = trim((string)($_POST['precio'] ?? '0'));
     $f['copias_disponibles'] = trim((string)($_POST['copias_disponibles'] ?? '0'));
     $f['id_editorial']       = (string)($_POST['id_editorial'] ?? '');
+    $f['num_paginas']        = trim((string)($_POST['num_paginas'] ?? ''));
+    $f['idioma']             = trim((string)($_POST['idioma'] ?? ''));
+    $f['clasificacion_edad'] = (string)($_POST['clasificacion_edad'] ?? 'adultos');
     $catsSel = array_values(array_unique(array_map('intval', (array)($_POST['categorias'] ?? []))));
 
     // --- Validaciones ---
@@ -95,6 +101,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!ctype_digit($f['copias_disponibles'])) {
         $errores[] = 'Las copias disponibles deben ser un número entero mayor o igual a 0.';
+    }
+    if ($f['num_paginas'] !== '' && (!ctype_digit($f['num_paginas']) || (int)$f['num_paginas'] < 1 || (int)$f['num_paginas'] > 100000)) {
+        $errores[] = 'El número de páginas debe ser un número entero mayor a 0.';
+    }
+    if ($f['idioma'] === '' || mb_strlen($f['idioma']) > 30) {
+        $errores[] = 'El idioma es obligatorio (máximo 30 caracteres).';
+    }
+    if (!in_array($f['clasificacion_edad'], ['ninos', 'jovenes', 'adultos'], true)) {
+        $errores[] = 'Selecciona una clasificación por edad válida.';
     }
     $idsCatValidos = array_map(fn($c) => (int)$c['id_categoria'], $categorias);
     $catsSel = array_values(array_intersect($catsSel, $idsCatValidos));
@@ -150,24 +165,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errores) {
         $isbn = $f['isbn'] === '' ? null : $f['isbn'];
         $fecha = $f['fecha_publicacion'] === '' ? null : $f['fecha_publicacion'];
+        $numPaginas = $f['num_paginas'] === '' ? null : (int)$f['num_paginas'];
+        // Tamaño del archivo en MB: se calcula solo cuando se sube un PDF nuevo
+        $tamanoMb = null;
+        if ($rutaPdf !== null && is_file(__DIR__ . '/../' . $rutaPdf)) {
+            $tamanoMb = round(filesize(__DIR__ . '/../' . $rutaPdf) / 1048576, 2);
+        }
         try {
             $pdo->beginTransaction();
             if ($editando) {
                 $pdo->prepare(
                     'UPDATE libros SET titulo=?, isbn=?, sinopsis=?, fecha_publicacion=?, precio=?, copias_disponibles=?,
                             id_autor=?, id_editorial=?, estado=?,
-                            archivo_pdf = COALESCE(?, archivo_pdf), portada = COALESCE(?, portada)
+                            num_paginas=?, idioma=?, clasificacion_edad=?,
+                            archivo_pdf = COALESCE(?, archivo_pdf), portada = COALESCE(?, portada),
+                            tamano_archivo_mb = COALESCE(?, tamano_archivo_mb)
                       WHERE id_libro=?'
                 )->execute([$f['titulo'], $isbn, $f['sinopsis'] ?: null, $fecha, $f['precio'], (int)$f['copias_disponibles'],
-                            $idAutor, $idEditorial, $estado, $rutaPdf, $rutaPortada, $id]);
+                            $idAutor, $idEditorial, $estado,
+                            $numPaginas, $f['idioma'], $f['clasificacion_edad'],
+                            $rutaPdf, $rutaPortada, $tamanoMb, $id]);
                 $idLibro = $id;
             } else {
                 $pdo->prepare(
                     'INSERT INTO libros (titulo, isbn, sinopsis, fecha_publicacion, portada, archivo_pdf, precio,
-                                         copias_disponibles, lecturas_acumuladas, estado, id_autor, id_editorial, fecha_alta)
-                     VALUES (?,?,?,?,?,?,?,?,0,?,?,?,NOW())'
+                                         copias_disponibles, lecturas_acumuladas, estado, id_autor, id_editorial,
+                                         num_paginas, idioma, tamano_archivo_mb, clasificacion_edad, fecha_alta)
+                     VALUES (?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,NOW())'
                 )->execute([$f['titulo'], $isbn, $f['sinopsis'] ?: null, $fecha, $rutaPortada, $rutaPdf, $f['precio'],
-                            (int)$f['copias_disponibles'], $estado, $idAutor, $idEditorial]);
+                            (int)$f['copias_disponibles'], $estado, $idAutor, $idEditorial,
+                            $numPaginas, $f['idioma'], $tamanoMb, $f['clasificacion_edad']]);
                 $idLibro = (int)$pdo->lastInsertId();
             }
 
@@ -279,6 +306,23 @@ require __DIR__ . '/inc/header.php';
                 <div class="col-md-4">
                     <label class="form-label">Copias disponibles</label>
                     <input type="number" min="0" name="copias_disponibles" class="form-control" value="<?= e($f['copias_disponibles']) ?>">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Número de páginas</label>
+                    <input type="number" min="1" name="num_paginas" class="form-control" value="<?= e((string)$f['num_paginas']) ?>">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Idioma *</label>
+                    <input name="idioma" class="form-control" maxlength="30" value="<?= e((string)$f['idioma']) ?>">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Clasificación por edad</label>
+                    <select name="clasificacion_edad" class="form-select">
+                        <?php foreach (['ninos' => 'Niños', 'jovenes' => 'Jóvenes', 'adultos' => 'Adultos'] as $val => $txt): ?>
+                            <option value="<?= $val ?>" <?= $f['clasificacion_edad'] === $val ? 'selected' : '' ?>><?= $txt ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <div class="col-12">
