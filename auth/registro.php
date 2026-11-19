@@ -7,14 +7,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $correo = trim($_POST['correo'] ?? '');
     $password = $_POST['password'] ?? '';
     // Solo se puede elegir Lector o Autor; Trabajador y Admin los asigna el administrador
-    $es_autor = ($_POST['tipo_cuenta'] ?? '') === 'autor';
+    // Acepta el campo del formulario nuevo (id_rol = 2) y el anterior (tipo_cuenta = autor)
+    $es_autor = ($_POST['tipo_cuenta'] ?? '') === 'autor' || ($_POST['id_rol'] ?? '') === '2';
 
     if ($nombre === '' || $correo === '' || $password === '') {
         header("Location: ../index.php?error=campos_vacios");
         exit;
     }
 
-    if (empty($_POST['acepto_terminos'])) {
+    // La casilla se llama "terminos" en el modal del inicio y "acepto_terminos" en las demás páginas
+    if (empty($_POST['terminos']) && empty($_POST['acepto_terminos'])) {
         header("Location: ../index.php?error=terminos");
         exit;
     }
