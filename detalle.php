@@ -2,12 +2,23 @@
 session_start();
 require_once 'config/conexion.php';
 
+/*
+ * Página de detalle de un libro en LecturaLibre.
+ * Recibe el ID del libro por la URL (detalle.php?id=X), verifica que el libro exista
+ * y esté aprobado, muestra su información completa, las reseñas ya moderadas y adapta
+ * los botones según si el usuario ya lo compró, lo tiene en favoritos o ya lo reseñó.
+ */
+session_start();
+require_once 'config/conexion.php';
+
+// Datos básicos de la sesión para controlar la barra de navegación y permisos
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
 // Contar libros en el carrito real del usuario
+// Si el usuario inició sesión, contamos cuántos libros tiene en su carrito para mostrarlo arriba
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -19,6 +30,8 @@ if ($logueado) {
 }
 
 // Mensajes de aviso tras login o registro
+// Revisamos los parámetros GET de la URL para mostrar avisos de éxito o error al usuario
+// (por ejemplo, cuando envía una reseña o intenta agregar un libro que ya había comprado)
 $alerta_texto = '';
 $alerta_tipo = '';
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
@@ -66,6 +79,17 @@ $id_libro = (int)($_GET['id'] ?? 0);
 $stmt = $conn->prepare("
     SELECT l.id_libro, l.id_autor, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas, l.portada,
        l.num_paginas, l.idioma, l.tamano_archivo_mb, l.clasificacion_edad,
+
+// Convertimos el parámetro 'id' de la URL a entero para evitar valores inválidos o inyección
+$id_libro = (int)($_GET['id'] ?? 0);
+
+// Consulta principal del libro:
+// - Se usa INNER JOIN con autores porque todo libro tiene un autor obligatorio.
+// - Se usa LEFT JOIN con editoriales porque un libro independiente puede no tener editorial (NULL).
+// - Las subconsultas juntan todas sus categorías en un texto y calculan el promedio solo de reseñas aprobadas.
+// - El filtro "l.estado = 'aprobado'" impide que alguien vea libros pendientes o dados de baja cambiando el ID en la URL.
+$stmt = $conn->prepare("
+    SELECT l.id_libro, l.titulo, l.isbn, l.sinopsis, l.fecha_publicacion, l.precio, l.lecturas_acumuladas, l.portada,
            a.nombre_artistico AS autor, a.biografia, e.nombre AS editorial,
            (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
               FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
@@ -92,6 +116,15 @@ if ($libro) {
            INNER JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
            WHERE p.id_usuario = r.id_usuario AND dp.id_libro = r.id_libro AND p.estado <> 'cancelado'
        ) AS compra_verificada
+$libro = $stmt->get_result()->fetch_assoc();   // Devuelve null si el libro no existe o no está aprobado
+$stmt->close();
+
+// Si el libro sí existe, traemos todas sus reseñas aprobadas ordenadas de la más reciente a la más antigua.
+// Las reseñas en estado 'pendiente' o 'rechazada' nunca se muestran en esta vista pública.
+$resenas = [];
+if ($libro) {
+    $stmt_r = $conn->prepare("
+        SELECT r.puntuacion, r.comentario, r.fecha_creacion, u.nombre_completo
         FROM resenas r
         INNER JOIN usuarios u ON r.id_usuario = u.id_usuario
         WHERE r.id_libro = ? AND r.estado = 'aprobada'
@@ -104,16 +137,22 @@ if ($libro) {
 }
 
 // Si hay sesión: ¿es favorito? ¿ya lo reseñó?
+// Si el usuario tiene sesión iniciada y el libro existe, revisamos 3 cosas personales:
+// 1. Si ya lo marcó como favorito (para cambiar el ícono del corazón).
+// 2. Si ya escribió una reseña (la base de datos solo permite una reseña por usuario y libro).
+// 3. Si ya compró este libro en algún pedido válido (para habilitar la descarga directa del PDF).
 $es_favorito = false;
 $mi_resena = null;
 $pedido_comprado = 0;
 if ($logueado && $libro) {
+    // 1. Verificar si está en la tabla favoritos
     $stmt_f = $conn->prepare("SELECT 1 FROM favoritos WHERE id_usuario = ? AND id_libro = ?");
     $stmt_f->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
     $stmt_f->execute();
     $es_favorito = $stmt_f->get_result()->num_rows > 0;
     $stmt_f->close();
 
+    // 2. Verificar si ya existe una reseña de este usuario para este libro (sin importar su estado)
     $stmt_m = $conn->prepare("SELECT estado FROM resenas WHERE id_usuario = ? AND id_libro = ?");
     $stmt_m->bind_param("ii", $_SESSION['id_usuario'], $id_libro);
     $stmt_m->execute();
@@ -121,6 +160,8 @@ if ($logueado && $libro) {
     $stmt_m->close();
 
     // Si ya lo compró se guarda el pedido para mostrar "Descargar PDF" en vez del carrito
+    // 3. Buscar si el libro aparece en el detalle de algún pedido no cancelado del usuario.
+    // Si ya lo tiene, guardamos el id_pedido para enlazar directo a php/descargar.php.
     $stmt_c = $conn->prepare("
         SELECT p.id_pedido FROM pedidos p
         INNER JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido
@@ -145,18 +186,21 @@ if ($logueado && $libro) {
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida en todo el sitio público -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
+            <!-- Botón de menú responsivo para móvil usando HTML nativo -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
 
+            <!-- Buscador global que redirige al catálogo con el término escrito -->
             <form class="search-bar" action="catalogo.php" method="get" role="search">
                 <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
                        placeholder="Buscar libros…">
@@ -172,6 +216,7 @@ if ($logueado && $libro) {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
+                    <!-- Enlace dinámico al panel de administración según el rol de la sesión -->
                     <?php if ($id_rol === 2): ?>
                         <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
                     <?php elseif ($id_rol === 3): ?>
@@ -206,6 +251,7 @@ if ($logueado && $libro) {
         </div>
     </header>
 
+    <!-- Banner superior para mostrar notificaciones de éxito o error -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
@@ -219,6 +265,7 @@ if ($logueado && $libro) {
 
     <?php if (!$libro): ?>
         <!-- El id no existe o el libro no está aprobado -->
+        <!-- Mensaje de respaldo cuando el ID no existe o el libro sigue pendiente/dado de baja -->
         <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
             <h2>Libro no encontrado</h2>
             <p>El libro no existe o todavía no ha sido aprobado.</p>
@@ -228,6 +275,10 @@ if ($logueado && $libro) {
 
         <section id="detalle" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
             <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+        <!-- Tarjeta principal con los datos completos del libro -->
+        <section id="detalle" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+            <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+                <!-- Verificamos con is_file() que la imagen exista físicamente antes de pintarla -->
                 <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
                     <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="portada-detalle">
                 <?php else: ?>
@@ -239,6 +290,7 @@ if ($logueado && $libro) {
                     <p><strong>Autor:</strong>
     <a href="autor.php?id=<?= (int)$libro['id_autor'] ?>"><?= htmlspecialchars($libro['autor']) ?></a>
 </p>
+                    <p><strong>Autor:</strong> <?= htmlspecialchars($libro['autor']) ?></p>
                     <p><strong>Categorías:</strong> <?= htmlspecialchars($libro['categorias'] ?? 'Sin categoría') ?></p>
                     <?php if ($libro['editorial']): ?>
                         <p><strong>Editorial:</strong> <?= htmlspecialchars($libro['editorial']) ?></p>
@@ -267,10 +319,14 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
 </p>
                     <div class="stars">⭐ <?= $libro['promedio'] ?? 'Sin reseñas' ?> (<?= count($resenas) ?> reseñas)</div>
 
+                    <div class="stars">⭐ <?= $libro['promedio'] ?? 'Sin reseñas' ?> (<?= count($resenas) ?> reseñas)</div>
+
+                    <!-- nl2br convierte los saltos de línea del texto en <br> después de limpiar el HTML -->
                     <p style="margin: 15px 0;"><?= nl2br(htmlspecialchars($libro['sinopsis'] ?? '')) ?></p>
                     <h3 style="color: #27ae60;"><?= $precio ?></h3>
                     <p style="font-size: 0.85rem; color: var(--wf-gray);">Lecturas: <?= (int)$libro['lecturas_acumuladas'] ?></p>
 
+                    <!-- Botones de acción: descargar (si ya lo compró) o agregar al carrito, favoritos y reportar -->
                     <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
                         <?php if ($pedido_comprado > 0): ?>
                             <a href="php/descargar.php?pedido=<?= $pedido_comprado ?>&libro=<?= $id_libro ?>" class="btn btn-primary">
@@ -285,6 +341,7 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
                             <i class="<?= $es_favorito ? 'fa-solid' : 'fa-regular' ?> fa-heart"></i>
                             <?= $es_favorito ? 'Quitar de favoritos' : 'Agregar a favoritos' ?>
                         </a>
+                        <!-- Redirige a contacto.php precargando el asunto con el título del libro a reportar -->
                         <a href="contacto.php?asunto=<?= urlencode('Reporte de contenido: ' . $libro['titulo']) ?>" class="btn" title="Reportar este libro">
                             <i class="fa-regular fa-flag"></i> Reportar
                         </a>
@@ -292,6 +349,7 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
                 </div>
             </div>
 
+            <!-- Biografía del autor (solo se muestra si el autor tiene biografía registrada) -->
             <?php if ($libro['biografia']): ?>
                 <hr style="margin: 20px 0;">
                 <h3>Sobre el autor</h3>
@@ -299,6 +357,7 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
             <?php endif; ?>
 
             <!-- Reseñas aprobadas -->
+            <!-- Sección de reseñas aprobadas -->
             <hr style="margin: 20px 0;">
             <h3 id="resenas">Reseñas y Valoraciones</h3>
             <div style="margin: 15px 0;">
@@ -326,6 +385,13 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
             <?php elseif ($pedido_comprado === 0): ?>
 <p style="color: var(--wf-gray);"><em>Solo quienes compraron este libro pueden escribir una reseña.</em></p>
 <?php elseif ($mi_resena): ?>
+            <!-- Control del formulario para escribir reseña:
+                 - Sin sesión: pide iniciar sesión.
+                 - Si ya reseñó este libro: muestra el estado de su reseña (pendiente, aprobada o rechazada).
+                 - Si tiene sesión y aún no ha opinado: muestra el formulario hacia php/resena_guardar.php. -->
+            <?php if (!$logueado): ?>
+                <p style="color: var(--wf-gray);"><em>Inicia sesión para escribir una reseña.</em></p>
+            <?php elseif ($mi_resena): ?>
                 <p style="color: var(--wf-gray);"><em>Ya enviaste tu reseña de este libro (estado: <?= htmlspecialchars($mi_resena['estado']) ?>).</em></p>
             <?php else: ?>
                 <h4>Escribir una reseña</h4>
@@ -351,6 +417,7 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
     <?php endif; ?>
 </main>
 
+    <!-- Ventana modal de inicio de sesión, registro y recuperación de contraseña -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -441,4 +508,5 @@ $edad_texto = $edades[$libro['clasificacion_edad'] ?? ''] ?? 'Todo público';
         </div>
     </footer>
 </body>
+</html>
 </html>

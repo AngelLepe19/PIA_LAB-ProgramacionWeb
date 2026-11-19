@@ -1,13 +1,21 @@
 <?php
+/*
+ * Página del carrito de selección de LecturaLibre.
+ * Muestra los libros que el usuario conectado ha agregado desde el catálogo o el detalle,
+ * calcula el monto total (incluyendo libros gratuitos), permite quitar libros de la lista
+ * y dirige hacia checkout.php para confirmar el pedido.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Obtenemos los datos de la sesión actual para saber si hay un usuario conectado y cuál es su rol
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar libros en el carrito real del usuario
+// Si el usuario tiene sesión iniciada, consultamos cuántos libros tiene en la tabla carrito
+// para pintar el número actualizado en el ícono de la barra superior
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -18,7 +26,9 @@ if ($logueado) {
     $stmt_cart->close();
 }
 
-// Mensajes de aviso tras login o registro
+// Revisamos si llegó algún mensaje de aviso por la URL.
+// Aquí también se atrapan errores propios del flujo de compra, como cuando todos los libros
+// del carrito ya habían sido comprados antes ('ya_comprado') o si falló la transacción ('pedido').
 $alerta_texto = '';
 $alerta_tipo = '';
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
@@ -57,7 +67,11 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
     }
 }
 
-// ---- Carrito: libros que el usuario tiene en su carrito ----
+// Consulta de los libros que el usuario tiene en su carrito:
+// - Se unen las tablas carrito, libros y autores para traer el título, precio y nombre del autor.
+// - Se filtra por l.estado = 'aprobado' por si algún libro fue dado de baja después de que
+//   el usuario lo guardara en su carrito.
+// - Se ordena por fecha_agregado DESC para mostrar primero los más recientes.
 $libros_carrito = [];
 $total_carrito = 0.00;
 if ($logueado) {
@@ -74,6 +88,7 @@ if ($logueado) {
     $libros_carrito = $stmt_c->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt_c->close();
 
+    // Sumamos el precio de cada libro del carrito para calcular el total general
     foreach ($libros_carrito as $lc) {
         $total_carrito += (float)$lc['precio'];
     }
@@ -90,18 +105,21 @@ if ($logueado) {
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida en todo el sitio público -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
+            <!-- Botón de menú desplegable para pantallas móviles -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
 
+            <!-- Buscador global que envía la consulta al catálogo -->
             <form class="search-bar" action="catalogo.php" method="get" role="search">
                 <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
                        placeholder="Buscar libros…">
@@ -117,6 +135,7 @@ if ($logueado) {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
+                    <!-- Acceso directo al panel de administración según el rol del usuario -->
                     <?php if ($id_rol === 2): ?>
                         <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
                     <?php elseif ($id_rol === 3): ?>
@@ -151,6 +170,7 @@ if ($logueado) {
         </div>
     </header>
 
+    <!-- Banner de alertas para mostrar mensajes de éxito o error al usuario -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
@@ -163,12 +183,17 @@ if ($logueado) {
         <section id="carrito">
             <h2 class="section-title">Tu Carrito de Selección</h2>
 
+            <!-- El carrito funciona por usuario en la base de datos, así que manejamos tres estados:
+                 1. Sin sesión iniciada: pide iniciar sesión.
+                 2. Con sesión pero sin libros: avisa que está vacío y ofrece ir al catálogo.
+                 3. Con libros guardados: muestra cada tarjeta y el resumen con el botón al checkout. -->
             <?php if (!$logueado): ?>
                 <p>Inicia sesión para ver y gestionar tu carrito.</p>
             <?php elseif (count($libros_carrito) === 0): ?>
                 <p>El carrito está vacío.</p>
                 <a href="catalogo.php" class="btn btn-primary" style="margin-top: 10px;">Ir al catálogo</a>
             <?php else: ?>
+                <!-- Lista de libros agregados actualmente al carrito -->
                 <div id="cart-items">
                     <?php foreach ($libros_carrito as $item): ?>
                         <?php $precio_txt = ((float)$item['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$item['precio'], 2); ?>
@@ -178,11 +203,13 @@ if ($logueado) {
                                 <p style="font-size: 0.85rem; color: var(--wf-gray);"><?= htmlspecialchars($item['autor']) ?></p>
                                 <p style="color:#27ae60; font-weight: bold;"><?= $precio_txt ?></p>
                             </div>
+                            <!-- Enlace que elimina este libro específico del carrito del usuario y recarga la página -->
                             <a href="php/carrito_quitar.php?id_libro=<?= (int)$item['id_libro'] ?>" class="btn btn-danger">Quitar</a>
                         </div>
                     <?php endforeach; ?>
                 </div>
 
+                <!-- Resumen del total y botón para pasar a la pantalla de confirmación (checkout.php) -->
                 <div id="cart-summary" style="margin-top: 20px; background: white; padding: 20px; border: 1px solid var(--wf-border); border-radius: var(--radius);">
                     <h3>Total: <span style="color: #27ae60;"><?= $total_carrito == 0 ? 'Gratis ($0.00)' : '$' . number_format($total_carrito, 2) ?></span></h3>
                     <a href="checkout.php" class="btn btn-primary" style="margin-top: 15px;">Continuar al Checkout &rarr;</a>
@@ -191,7 +218,7 @@ if ($logueado) {
         </section>
     </main>
 
-
+    <!-- Ventana modal con los formularios de inicio de sesión, registro y recuperación -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -211,6 +238,7 @@ if ($logueado) {
                 <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
             </form>
 
+            <!-- validarRegistro() verifica en el navegador que ambas contraseñas coincidan -->
             <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
                 <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
                 <div class="form-group">

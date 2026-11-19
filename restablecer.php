@@ -1,11 +1,23 @@
 <?php
+/*
+ * Página para restablecer la contraseña de un usuario en LecturaLibre.
+ * Recibe un token temporal por la URL (restablecer.php?token=...), revisa en la base
+ * de datos que ese token exista, no se haya utilizado antes y siga vigente.
+ * Si todo está en orden, muestra el correo de la cuenta y el formulario para definir
+ * una nueva contraseña.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Leemos el token que viene en el enlace de recuperación y preparamos las variables de estado
 $token = trim($_GET['token'] ?? '');
 $token_valido = false;
 $correo_usuario = '';
 
+// Si llegó un token en la URL, verificamos su autenticidad en la base de datos:
+// - Convertimos el token con sha256 porque en la tabla tokens_recuperacion se guarda cifrado.
+// - Con el INNER JOIN traemos también el correo del usuario dueño de ese token.
+// - Comprobamos que usado = 0 (que el enlace no se haya usado ya) y que fecha_expiracion > NOW() (que no haya caducado).
 if ($token !== '') {
     $token_hash = hash('sha256', $token);
     $sql = "SELECT t.id_token, u.correo
@@ -19,12 +31,14 @@ if ($token !== '') {
     $res = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
+    // Si la consulta encontró un registro vigente, autorizamos mostrar el formulario
     if ($res) {
         $token_valido = true;
         $correo_usuario = $res['correo'];
     }
 }
 
+// Revisamos si auth/procesar_restablecimiento.php regresó algún aviso de error por la URL
 $error_msg = '';
 if (isset($_GET['error'])) {
     if ($_GET['error'] === 'no_coinciden') {
@@ -43,6 +57,7 @@ if (isset($_GET['error'])) {
     <link rel="stylesheet" href="assets/css/estilos.css">
 </head>
 <body>
+    <!-- Encabezado sencillo con enlace directo para volver a la página principal -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
@@ -56,21 +71,25 @@ if (isset($_GET['error'])) {
             <h2 style="margin-bottom: 15px;">Restablecer Contraseña</h2>
 
             <?php if (!$token_valido): ?>
+                <!-- Si el enlace está alterado, vencido o ya fue usado, bloqueamos el cambio -->
                 <p style="color: #721c24; margin-bottom: 15px;">
                     El enlace de recuperación no es válido, ya fue utilizado o ha expirado.
                 </p>
                 <a href="index.php" class="btn btn-primary">Volver al Inicio</a>
             <?php else: ?>
+                <!-- Mostramos a qué correo pertenece el enlace para confirmar que es su cuenta -->
                 <p style="font-size: 0.9rem; color: var(--wf-gray); margin-bottom: 15px;">
                     Cuenta: <strong><?= htmlspecialchars($correo_usuario) ?></strong>
                 </p>
 
+                <!-- Aviso visual en caso de que el usuario haya dejado campos vacíos o puesto claves distintas -->
                 <?php if ($error_msg !== ''): ?>
                     <div style="padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
                         <?= htmlspecialchars($error_msg) ?>
                     </div>
                 <?php endif; ?>
 
+                <!-- Enviamos el token original oculto junto con la nueva contraseña para validarlo de nuevo al guardar -->
                 <form action="auth/procesar_restablecimiento.php" method="POST">
                     <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
                     <div class="form-group">

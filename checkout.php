@@ -1,87 +1,105 @@
 <?php
+/*
+ * Página de checkout (confirmación de pedido) de LecturaLibre.
+ * Revisa que el usuario haya iniciado sesión, verifica qué libros de su carrito
+ * siguen disponibles y aún no ha adquirido, muestra el resumen final con el total
+ * y envía la orden a php/checkout_procesar.php para registrarla en la base de datos.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Datos básicos de la sesión para controlar permisos y la barra de navegación
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar libros en el carrito real del usuario
-$cart_count = 0;
-if ($logueado) {
-    $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
-    $stmt_cart->bind_param("i", $_SESSION['id_usuario']);
-    $stmt_cart->execute();
-    $res_cart = $stmt_cart->get_result()->fetch_assoc();
-    $cart_count = (int)($res_cart['total'] ?? 0);
-    $stmt_cart->close();
+// Nadie puede entrar al checkout sin haber iniciado sesión; si no está conectado,
+// lo regresamos al carrito con un aviso para que ingrese primero
+if (!$logueado) {
+    header('Location: carrito.php?error=inicia_sesion');
+    exit;
 }
 
-// Mensajes de aviso tras login o registro
+// Contamos los libros que tiene en su carrito para mostrar el número en el ícono superior
+$cart_count = 0;
+$stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
+$stmt_cart->bind_param("i", $_SESSION['id_usuario']);
+$stmt_cart->execute();
+$res_cart = $stmt_cart->get_result()->fetch_assoc();
+$cart_count = (int)($res_cart['total'] ?? 0);
+$stmt_cart->close();
+
+// Revisamos si llegó algún error por la URL (por ejemplo, si no aceptó los términos o falló el proceso)
 $alerta_texto = '';
 $alerta_tipo = '';
-if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
-    $alerta_texto = '¡Cuenta creada con éxito! Bienvenido a LecturaLibre.';
-    $alerta_tipo = 'exito';
-} elseif (isset($_GET['error'])) {
+if (isset($_GET['error'])) {
     $alerta_tipo = 'error';
     switch ($_GET['error']) {
-        case 'credenciales_invalidas':
-            $alerta_texto = 'Correo o contraseña incorrectos.';
+        case 'terminos':
+            $alerta_texto = 'Debes aceptar los Términos de uso y el Aviso de privacidad para completar el pedido.';
             break;
-        case 'correo_existente':
-            $alerta_texto = 'Ese correo electrónico ya está registrado.';
-            break;
-        case 'cuenta_inactiva':
-            $alerta_texto = 'Tu cuenta está pendiente o inactiva. Contacta al administrador.';
-            break;
-        case 'campos_vacios':
-            $alerta_texto = 'Por favor completa todos los campos obligatorios.';
-            break;
-        case 'inicia_sesion':
-            $alerta_texto = 'Inicia sesión para continuar.';
+        case 'metodo_invalido':
+            $alerta_texto = 'Selecciona un método de pago válido para continuar.';
             break;
         case 'pedido':
-            $alerta_texto = 'No se pudo generar el pedido. Intenta de nuevo.';
-            break;
-        case 'sin_permiso':
-            $alerta_texto = 'No tienes acceso a ese archivo.';
+            $alerta_texto = 'Ocurrió un problema al procesar tu pedido. Inténtalo de nuevo.';
             break;
         default:
-            $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
+            $alerta_texto = 'No se pudo completar la operación.';
             break;
     }
 }
 
-// ---- Checkout: solo con sesión ----
-if (!$logueado) {
-    header('Location: index.php?error=inicia_sesion');
-    exit;
-}
-
-// Libros del carrito para el resumen
-$stmt_c = $conn->prepare("
-    SELECT l.id_libro, l.titulo, l.precio, a.nombre_artistico AS autor
+// Traemos los libros que el usuario tiene en su carrito, asegurándonos de que sigan aprobados
+$stmt_items = $conn->prepare("
+    SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor
     FROM carrito c
     INNER JOIN libros l ON c.id_libro = l.id_libro
     INNER JOIN autores a ON l.id_autor = a.id_autor
     WHERE c.id_usuario = ? AND l.estado = 'aprobado'
+    ORDER BY c.fecha_agregado DESC
 ");
-$stmt_c->bind_param("i", $_SESSION['id_usuario']);
-$stmt_c->execute();
-$items = $stmt_c->get_result()->fetch_all(MYSQLI_ASSOC);
-$stmt_c->close();
+$stmt_items->bind_param("i", $_SESSION['id_usuario']);
+$stmt_items->execute();
+$items_brutos = $stmt_items->get_result()->fetch_all(MYSQLI_ASSOC);
+$stmt_items->close();
 
-// Si el carrito está vacío no hay nada que confirmar
-if (count($items) === 0) {
+// Si el carrito está vacío, no tiene sentido quedarse en el checkout; lo regresamos a carrito.php
+if (count($items_brutos) === 0) {
     header('Location: carrito.php');
     exit;
 }
 
-$total = 0.00;
-foreach ($items as $item) {
-    $total += (float)$item['precio'];
+// Consultamos qué libros ya compró este usuario anteriormente (en pedidos que no estén cancelados)
+// para evitar que vuelva a adquirir un libro que ya tiene disponible en su cuenta
+$stmt_comp = $conn->prepare("
+    SELECT DISTINCT dp.id_libro
+    FROM detalle_pedido dp
+    INNER JOIN pedidos p ON p.id_pedido = dp.id_pedido
+    WHERE p.id_usuario = ? AND p.estado <> 'cancelado'
+");
+$stmt_comp->bind_param("i", $_SESSION['id_usuario']);
+$stmt_comp->execute();
+$ya_comprados = array_map('intval', array_column($stmt_comp->get_result()->fetch_all(MYSQLI_ASSOC), 'id_libro'));
+$stmt_comp->close();
+
+// Filtramos la lista dejando únicamente los libros nuevos que el usuario aún no posee
+// y aprovechamos el mismo recorrido para sumar el costo total del pedido
+$libros_checkout = [];
+$total_checkout = 0.00;
+foreach ($items_brutos as $item) {
+    if (!in_array((int)$item['id_libro'], $ya_comprados, true)) {
+        $libros_checkout[] = $item;
+        $total_checkout += (float)$item['precio'];
+    }
+}
+
+// Si todos los libros que tenía en el carrito ya los había comprado antes, lo mandamos de vuelta
+// al carrito con un mensaje explicándole que ya puede descargarlos desde su página de detalle
+if (count($libros_checkout) === 0) {
+    header('Location: carrito.php?error=ya_comprado');
+    exit;
 }
 ?>
 <!DOCTYPE html>
@@ -89,24 +107,27 @@ foreach ($items as $item) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checkout | LecturaLibre</title>
+    <title>Confirmar Pedido | LecturaLibre</title>
     <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida en todo el sitio público -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
+            <!-- Botón de menú desplegable para pantallas móviles -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
 
+            <!-- Buscador global que redirige al catálogo -->
             <form class="search-bar" action="catalogo.php" method="get" role="search">
                 <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
                        placeholder="Buscar libros…">
@@ -122,6 +143,7 @@ foreach ($items as $item) {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
+                    <!-- Enlace dinámico al panel según el rol del usuario conectado -->
                     <?php if ($id_rol === 2): ?>
                         <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
                     <?php elseif ($id_rol === 3): ?>
@@ -136,150 +158,96 @@ foreach ($items as $item) {
                         <i class="fa-solid fa-cart-shopping"></i> <span id="cart-count" class="badge"><?= $cart_count ?></span>
                     </button>
 
-                    <?php if (!$logueado): ?>
-                        <div id="auth-buttons">
-                            <button class="btn" onclick="openAuthModal('login')"><i class="fa-regular fa-user"></i> Iniciar Sesión</button>
-                            <button class="btn btn-primary" onclick="openAuthModal('signup')">Registrarse</button>
-                        </div>
-                    <?php else: ?>
-                        <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
-                            <button class="btn" onclick="window.location.href='perfil.php'">
-                                <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
-                            </button>
-                            <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
-                                <i class="fa-solid fa-right-from-bracket"></i>
-                            </a>
-                        </div>
-                    <?php endif; ?>
+                    <div id="user-menu" style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn" onclick="window.location.href='perfil.php'">
+                            <i class="fa-solid fa-circle-user"></i> <span id="user-display-name"><?= htmlspecialchars($nombre_usuario) ?></span>
+                        </button>
+                        <a href="auth/logout.php" class="btn btn-danger" title="Cerrar sesión">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </header>
 
+    <!-- Aviso de error si el envío anterior tuvo algún problema de validación -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
-            <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
+            <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
                 <?= htmlspecialchars($alerta_texto) ?>
             </div>
         </div>
     <?php endif; ?>
 
     <main class="container">
-        <h2 class="section-title">Checkout</h2>
+        <a href="carrito.php" class="btn" style="margin-bottom: 15px;">&larr; Volver al carrito</a>
 
-        <!-- Resumen del pedido -->
-        <section style="background: white; padding: 20px; border: 1px solid var(--wf-border); border-radius: var(--radius); margin-bottom: 20px;">
-            <h3>Resumen del pedido</h3>
-            <div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos">
-            <table class="wf-table">
-                <thead>
-                    <tr><th>Libro</th><th>Autor</th><th>Precio</th></tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($items as $item): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($item['titulo']) ?></td>
-                            <td><?= htmlspecialchars($item['autor']) ?></td>
-                            <td><?= ((float)$item['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$item['precio'], 2) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot>
-                    <tr><th colspan="2">Total</th><th><?= $total == 0 ? 'Gratis' : '$' . number_format($total, 2) ?></th></tr>
-                </tfoot>
-            </table>
+        <section id="checkout" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+            <h2 class="section-title">Resumen de tu Pedido</h2>
+            <p style="color: var(--wf-gray); margin-bottom: 20px;">
+                Verifica los libros seleccionados antes de confirmar. Una vez completado el pedido, podrás descargarlos en formato PDF de inmediato.
+            </p>
+
+            <!-- Desglose de los libros incluidos en este pedido -->
+            <div style="margin-bottom: 20px;">
+                <?php foreach ($libros_checkout as $libro): ?>
+                    <?php $precio_txt = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2); ?>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--wf-border);">
+                        <div>
+                            <strong><?= htmlspecialchars($libro['titulo']) ?></strong>
+                            <p style="font-size: 0.85rem; color: var(--wf-gray);">Autor: <?= htmlspecialchars($libro['autor']) ?></p>
+                        </div>
+                        <span style="color: #27ae60; font-weight: bold;"><?= $precio_txt ?></span>
+                    </div>
+                <?php endforeach; ?>
             </div>
-        </section>
 
-        <!-- Confirmación (el pago es simulado) -->
-        <section style="background: white; padding: 20px; border: 1px solid var(--wf-border); border-radius: var(--radius);">
-            <h3>Confirmar pedido</h3>
-            <form action="php/checkout_procesar.php" method="POST" style="margin-top: 10px;">
-                <?php if ($total > 0): ?>
+            <!-- Total calculado en el servidor para evitar alteraciones desde el navegador -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--wf-bg); padding: 15px; border-radius: var(--radius); margin-bottom: 20px;">
+                <span style="font-size: 1.05rem; font-weight: bold;">Total a pagar:</span>
+                <span style="font-size: 1.2rem; font-weight: bold; color: #27ae60;">
+                    <?= $total_checkout == 0 ? 'Gratis ($0.00)' : '$' . number_format($total_checkout, 2) ?>
+                </span>
+            </div>
+
+            <!-- Formulario que envía la confirmación a php/checkout_procesar.php -->
+            <form action="php/checkout_procesar.php" method="POST">
+                <?php if ($total_checkout > 0): ?>
+                    <!-- Si hay libros de pago, mostramos el selector de método de pago -->
                     <div class="form-group">
-                        <label for="metodo_pago">Método de pago (simulado)</label>
-                        <select id="metodo_pago" name="metodo_pago">
-                            <option value="tarjeta">Tarjeta de débito / crédito</option>
+                        <label for="metodo_pago">Método de pago</label>
+                        <select id="metodo_pago" name="metodo_pago" required>
+                            <option value="tarjeta">Tarjeta de crédito o débito</option>
+                            <option value="transferencia">Transferencia bancaria</option>
                             <option value="paypal">PayPal</option>
-                            <option value="oxxo">Pago en OXXO</option>
                         </select>
                     </div>
-                    <p style="font-size: 0.85rem; color: var(--wf-gray); margin-bottom: 10px;">Proyecto escolar: el pago es una simulación, no se hace ningún cargo.</p>
                 <?php else: ?>
-                    <p style="margin-bottom: 10px;">Todos los libros son gratuitos, no se requiere pago.</p>
+                    <!-- Si todos los libros son gratuitos, enviamos 'gratuito' automáticamente sin pedir datos de cobro -->
+                    <input type="hidden" name="metodo_pago" value="gratuito">
+                    <p style="font-size: 0.9rem; color: #155724; background: #d4edda; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px;">
+                        <i class="fa-solid fa-circle-check"></i> Este pedido es 100% gratuito. No se realizará ningún cargo.
+                    </p>
                 <?php endif; ?>
-                <a href="carrito.php" class="btn">&larr; Regresar al carrito</a>
-                <button type="submit" class="btn btn-primary">Confirmar pedido</button>
+
+                <!-- Aceptación obligatoria de términos y privacidad antes de generar la orden -->
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 20px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>
+                        Confirmo que acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el
+                        <a href="privacidad.php" target="_blank">Aviso de privacidad</a> para la descarga digital.
+                    </span>
+                </label>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 1rem;">
+                    <i class="fa-solid fa-check"></i> Confirmar y Obtener Libros
+                </button>
             </form>
         </section>
     </main>
 
-
-    <div class="modal-overlay" id="authModal">
-        <div class="modal">
-            <span class="close-modal" onclick="closeAuthModal()">&times;</span>
-            
-            <form id="loginForm" action="auth/login.php" method="POST">
-                <h3 style="margin-bottom: 15px;">Iniciar Sesión</h3>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="login-email" placeholder="usuario@correo.com" required>
-                </div>
-                <div class="form-group">
-                    <label>Contraseña</label>
-                    <input type="password" name="password" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Ingresar</button>
-                <p class="auth-toggle">¿Olvidaste tu contraseña? <a onclick="toggleAuthMode('recover')">Recuperar aquí</a></p>
-                <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
-            </form>
-
-            <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
-                <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
-                <div class="form-group">
-                    <label>Nombre Completo</label>
-                    <input type="text" name="nombre_completo" id="signup-name" placeholder="Tu Nombre" required>
-                </div>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="signup-email" placeholder="usuario@correo.com" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password">Contraseña</label>
-                    <input type="password" name="password" id="signup-password" autocomplete="new-password" placeholder="••••••••" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-password-confirm">Confirmar contraseña</label>
-                    <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
-                </div>
-                <div class="form-group">
-                    <label for="signup-tipo">Tipo de cuenta</label>
-                    <select name="tipo_cuenta" id="signup-tipo">
-                        <option value="lector">Lector</option>
-                        <option value="autor">Autor (quiero publicar mis libros)</option>
-                    </select>
-                </div>
-                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
-                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
-                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
-                </label>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
-                <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
-            </form>
-
-            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
-                <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
-                <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
-                <div class="form-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
-                <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
-            </form>
-        </div>
-    </div>
-
+    <!-- Pie de página compartido -->
     <footer>
         <div class="container footer-cols">
             <div>

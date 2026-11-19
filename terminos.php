@@ -1,13 +1,20 @@
 <?php
+/*
+ * Página de Términos de Uso de LecturaLibre.
+ * Establece las reglas generales para lectores y autores dentro de la plataforma:
+ * uso personal de los archivos descargados, derechos sobre las obras publicadas
+ * y criterios de moderación de reseñas y cuentas.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Datos básicos de la sesión para mantener coherente la barra superior
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar libros en el carrito real del usuario
+// Si el usuario tiene sesión activa, consultamos cuántos artículos tiene en su carrito
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -17,22 +24,19 @@ if ($logueado) {
     $cart_count = (int)($res_cart['total'] ?? 0);
     $stmt_cart->close();
 }
-
-// Esta página no maneja avisos propios
-$alerta_texto = '';
-$alerta_tipo = '';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Términos de uso - LecturaLibre</title>
+    <title>Términos de Uso | LecturaLibre</title>
     <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
@@ -94,59 +98,46 @@ $alerta_tipo = '';
         </div>
     </header>
 
-    <?php if ($alerta_texto !== ''): ?>
-        <div class="container" style="margin-top: 15px;">
-            <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
-                <?= htmlspecialchars($alerta_texto) ?>
-            </div>
-        </div>
-    <?php endif; ?>
-
     <main class="container">
-        <section id="terminos" class="texto-legal" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border); line-height: 1.6;">
-            <h2 class="section-title">Términos de uso</h2>
-            <p style="font-size: 0.85rem; color: var(--wf-gray);">Última actualización: noviembre de 2026</p>
+        <article style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border); line-height: 1.65;">
+            <h2 class="section-title">Términos y Condiciones de Uso</h2>
+            <p style="font-size: 0.85rem; color: var(--wf-gray); margin-bottom: 20px;">
+                Última actualización: <?= date('Y') ?>
+            </p>
 
-            <p>Al crear una cuenta o usar LecturaLibre aceptas estos términos. Si no estás de acuerdo, no utilices la plataforma.</p>
+            <h3 style="margin: 16px 0 8px;">1. Aceptación de los términos</h3>
+            <p style="margin-bottom: 12px;">
+                Al registrarte, navegar o descargar contenido desde <strong>LecturaLibre</strong>, aceptas cumplir con las condiciones descritas en este documento. Si no estás de acuerdo con alguna disposición, te pedimos abstenerte de utilizar los servicios de descarga y publicación.
+            </p>
 
-            <h3>1. Qué es LecturaLibre</h3>
-            <p>LecturaLibre es una biblioteca digital donde autores independientes publican sus libros en formato PDF y los lectores pueden consultarlos, comprarlos y descargarlos. Algunos libros son gratuitos y otros tienen el precio que fija su autor.</p>
+            <h3 style="margin: 16px 0 8px;">2. Cuentas de usuario y responsabilidades</h3>
+            <p style="margin-bottom: 12px;">
+                Cada usuario es responsable de mantener la confidencialidad de su contraseña y de la actividad realizada desde su cuenta. Al registrarte puedes elegir entre un perfil de <strong>Lector</strong> o de <strong>Autor</strong>, comprometiéndote a proporcionar información veraz.
+            </p>
 
-            <h3>2. Cuentas de usuario</h3>
-            <ul>
-                <li>Debes registrarte con datos verdaderos y un correo electrónico propio.</li>
-                <li>Eres responsable de cuidar tu contraseña y de lo que se haga con tu cuenta.</li>
-                <li>Podemos suspender cuentas que incumplan estos términos.</li>
-            </ul>
+            <h3 style="margin: 16px 0 8px;">3. Uso permitido de los libros digitales</h3>
+            <p style="margin-bottom: 12px;">
+                Los archivos PDF obtenidos a través de la plataforma están destinados exclusivamente al uso personal y educativo del lector. Queda prohibida su reventa o redistribución comercial sin autorización expresa de su autor o titular de derechos.
+            </p>
 
-            <h3>3. Compras y descargas</h3>
-            <ul>
-                <li>Cada libro se compra una sola vez. Después de la compra puedes volver a descargarlo desde la página del libro las veces que lo necesites.</li>
-                <li>Los libros son para uso personal. No está permitido revenderlos, compartir el archivo PDF ni publicarlo en otros sitios.</li>
-                <li>LecturaLibre no solicita ni guarda datos de tarjetas bancarias.</li>
-            </ul>
+            <h3 style="margin: 16px 0 8px;">4. Publicaciones de autores y derechos de autor</h3>
+            <p style="margin-bottom: 12px;">
+                Los usuarios con cuenta de Autor declaran poseer los derechos necesarios sobre las obras que suben a LecturaLibre, o bien que dichas obras pertenecen al dominio público o cuentan con licencias libres compatibles. Toda obra pasa por una revisión administrativa antes de mostrarse al público.
+            </p>
 
-            <h3>4. Autores</h3>
-            <ul>
-                <li>Al publicar un libro, el autor declara que es el creador de la obra o que tiene los derechos para distribuirla, y que el contenido no infringe derechos de terceros.</li>
-                <li>El autor conserva sus derechos de autor. Solo autoriza a LecturaLibre a mostrar y distribuir la obra dentro de la plataforma mientras esté publicada.</li>
-                <li>Todo libro nuevo o modificado pasa por una revisión antes de aparecer en el catálogo. LecturaLibre puede rechazar o dar de baja una obra que no cumpla estos términos.</li>
-            </ul>
+            <h3 style="margin: 16px 0 8px;">5. Reseñas y normas de convivencia</h3>
+            <p style="margin-bottom: 12px;">
+                Las opiniones publicadas en la ficha de cada libro deben ser respetuosas y centrarse en el contenido de la obra. El equipo de moderación puede rechazar reseñas que contengan lenguaje ofensivo, spam o información ajena al libro.
+            </p>
 
-            <h3>5. Reseñas</h3>
-            <p>Las reseñas son moderadas antes de publicarse. No se aceptan reseñas con insultos, contenido discriminatorio, spam o datos personales de otras personas. Cada usuario puede escribir una reseña por libro.</p>
-
-            <h3>6. Reportar contenido</h3>
-            <p>Si un libro infringe tus derechos de autor o tiene contenido inapropiado, usa el botón <strong>Reportar</strong> en la página del libro o escríbenos desde <a href="contacto.php">Contacto</a>. Revisaremos el caso y, si procede, el libro se dará de baja del catálogo, conforme a la Ley Federal del Derecho de Autor.</p>
-
-            <h3>7. Cambios a estos términos</h3>
-            <p>Podemos actualizar estos términos. La fecha de la última actualización aparece al inicio de esta página.</p>
-
-            <p>Consulta también nuestro <a href="privacidad.php">Aviso de privacidad</a>.</p>
-        </section>
+            <h3 style="margin: 16px 0 8px;">6. Suspensión de contenido o cuentas</h3>
+            <p>
+                LecturaLibre se reserva el derecho de dar de baja libros o desactivar cuentas que incumplan estas normas o vulneren derechos de terceros. Para cualquier aclaración puedes comunicarte mediante nuestra sección de <a href="contacto.php">Contacto</a>.
+            </p>
+        </article>
     </main>
 
-
+    <!-- Ventana modal de inicio de sesión, registro y recuperación -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -199,12 +190,12 @@ $alerta_tipo = '';
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
+            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
                     <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
+                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
                 <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
@@ -237,4 +228,4 @@ $alerta_tipo = '';
         </div>
     </footer>
 </body>
-</html>
+</html>

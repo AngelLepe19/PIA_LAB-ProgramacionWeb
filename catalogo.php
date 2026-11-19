@@ -1,13 +1,20 @@
 <?php
+/*
+ * Página del catálogo completo de LecturaLibre.
+ * Muestra todos los libros que ya fueron aprobados y permite filtrarlos por
+ * texto (título, autor o categoría), por género y por orden (recientes, leídos, etc.).
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Datos básicos de la sesión para saber si hay alguien conectado y qué rol tiene
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar libros en el carrito real del usuario
+// Si el usuario inició sesión, contamos cuántos libros tiene guardados en su carrito
+// para mostrar el número en el ícono de arriba
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -18,7 +25,7 @@ if ($logueado) {
     $stmt_cart->close();
 }
 
-// Mensajes de aviso tras login o registro
+// Revisamos si llegó algún aviso por la URL (por ejemplo, tras registrarse o si falló el login)
 $alerta_texto = '';
 $alerta_tipo = '';
 if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
@@ -44,12 +51,14 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
             break;
     }
 }
-// ---- Catálogo: filtros que llegan por la URL ----
+
+// Leemos los filtros que vienen en la URL cuando el usuario usa el buscador o los selectores
 $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$id_categoria = (int)($_GET['categoria'] ?? 0);   // 0 = todas
+$id_categoria = (int)($_GET['categoria'] ?? 0);   // 0 significa que no eligió categoría (mostrar todas)
 $orden = $_GET['orden'] ?? 'recientes';
 
-// Ordenes permitidos (no se mete texto del usuario al SQL)
+// Lista cerrada de formas de ordenar. Como el ORDER BY de SQL no acepta signos de interrogación,
+// validamos contra este arreglo para asegurarnos de que nadie meta código raro por la URL.
 $ordenes = [
     'recientes'  => 'l.fecha_alta DESC',
     'populares'  => 'l.lecturas_acumuladas DESC',
@@ -60,10 +69,13 @@ if (!isset($ordenes[$orden])) {
     $orden = 'recientes';
 }
 
-// Categorías para el select
+// Traemos todas las categorías de la base de datos para llenar el menú desplegable de filtros
 $categorias = $conn->query("SELECT id_categoria, nombre FROM categorias ORDER BY nombre")->fetch_all(MYSQLI_ASSOC);
 
-// Libros aprobados con autor, categorías y promedio de reseñas aprobadas
+// Consulta principal de libros:
+// - Solo trae libros con estado 'aprobado' (los pendientes o dados de baja no salen al público).
+// - Con GROUP_CONCAT junta en un solo texto todas las categorías de cada libro.
+// - Calcula el promedio de estrellas tomando en cuenta únicamente las reseñas ya aprobadas.
 $sql = "SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS autor,
                (SELECT GROUP_CONCAT(c.nombre SEPARATOR ', ')
                   FROM libro_categoria lc JOIN categorias c ON c.id_categoria = lc.id_categoria
@@ -73,21 +85,25 @@ $sql = "SELECT l.id_libro, l.titulo, l.precio, l.portada, a.nombre_artistico AS 
         FROM libros l
         INNER JOIN autores a ON l.id_autor = a.id_autor
         WHERE l.estado = 'aprobado'";
+
+// Vamos armando los tipos ('s' para texto, 'i' para entero) y los valores de forma dinámica
+// según los filtros que sí haya usado el usuario
 $tipos = '';
 $params = [];
 
-// Buscar por título, autor o categoría
+// Si escribió algo en la caja de búsqueda, buscamos coincidencias en título, autor o categoría
 if ($q !== '') {
     $sql .= " AND (l.titulo LIKE ? ESCAPE '!' OR a.nombre_artistico LIKE ? ESCAPE '!'
               OR EXISTS (SELECT 1 FROM libro_categoria lc2
                          JOIN categorias c2 ON c2.id_categoria = lc2.id_categoria
                          WHERE lc2.id_libro = l.id_libro AND c2.nombre LIKE ? ESCAPE '!'))";
+    // Escapamos % y _ para que si el usuario escribe esos símbolos los busque como texto normal
     $like = '%' . strtr($q, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
     $tipos .= 'sss';
     array_push($params, $like, $like, $like);
 }
 
-// Filtrar por categoría
+// Si eligió una categoría específica, filtramos los libros que pertenezcan a ella
 if ($id_categoria > 0) {
     $sql .= " AND EXISTS (SELECT 1 FROM libro_categoria lc3
                           WHERE lc3.id_libro = l.id_libro AND lc3.id_categoria = ?)";
@@ -95,16 +111,18 @@ if ($id_categoria > 0) {
     $params[] = $id_categoria;
 }
 
+// Agregamos el orden elegido y preparamos la consulta para evitar inyección SQL
 $sql .= " ORDER BY " . $ordenes[$orden];
 $stmt = $conn->prepare($sql);
 if ($tipos !== '') {
+    // El operador "..." pasa todos los elementos del arreglo $params como argumentos separados
     $stmt->bind_param($tipos, ...$params);
 }
 $stmt->execute();
 $libros = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Favoritos del usuario para pintar el corazón
+// Si el usuario tiene sesión, sacamos los IDs de sus libros favoritos para pintar el corazón relleno
 $mis_favoritos = [];
 if ($logueado) {
     $stmt_fav = $conn->prepare("SELECT id_libro FROM favoritos WHERE id_usuario = ?");
@@ -114,7 +132,8 @@ if ($logueado) {
     $stmt_fav->close();
 }
 
-// Libros que el usuario ya compró (no se pueden volver a agregar al carrito)
+// También sacamos los IDs de los libros que ya adquirió antes (en pedidos no cancelados)
+// para mostrarle el botón "Comprado" en lugar de dejar que los vuelva a meter al carrito
 $mis_comprados = [];
 if ($logueado) {
     $stmt_comp = $conn->prepare("
@@ -139,18 +158,21 @@ if ($logueado) {
 </head>
 <body>
 
+    <!-- Encabezado y barra de navegación compartida -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
                 <i class="fa-solid fa-book-open"></i><span>LecturaLibre</span>
             </a>
 
+            <!-- Menú desplegable para pantallas chicas -->
             <details class="nav-menu-toggle">
                 <summary class="btn search-icon" aria-label="Menú" aria-controls="nav-menu">
                     <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 </summary>
             </details>
 
+            <!-- Buscador rápido del encabezado que envía el texto por GET a este mismo catálogo -->
             <form class="search-bar" action="catalogo.php" method="get" role="search">
                 <input type="search" id="global-search" name="q" aria-label="Buscar por título, autor o categoría"
                        placeholder="Buscar libros…" value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>">
@@ -166,6 +188,7 @@ if ($logueado) {
                     <li><a href="nosotros.php" id="link-nosotros" class="<?= $pagina_actual === 'nosotros.php' ? 'active-link' : '' ?>">Nosotros</a></li>
                     <li><a href="contacto.php" id="link-contacto" class="<?= $pagina_actual === 'contacto.php' ? 'active-link' : '' ?>">Contacto</a></li>
 
+                    <!-- Enlace al panel administrativo según el rol del usuario conectado -->
                     <?php if ($id_rol === 2): ?>
                         <li id="author-nav-item"><a href="admin/libros.php">Panel Autor</a></li>
                     <?php elseif ($id_rol === 3): ?>
@@ -200,6 +223,7 @@ if ($logueado) {
         </div>
     </header>
 
+    <!-- Aviso de éxito o error si viene en la URL -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
@@ -212,7 +236,7 @@ if ($logueado) {
     <section id="catalogo">
         <h2 class="section-title">Catálogo Completo</h2>
 
-        <!-- Filtros (se mandan por GET) -->
+        <!-- Formulario de filtros: manda los parámetros por GET para que la búsqueda se pueda compartir por enlace -->
         <form class="catalog-filters" method="get" action="catalogo.php">
             <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Título, autor o categoría" aria-label="Buscar por título, autor o categoría">
             <select name="categoria" aria-label="Categoría">
@@ -235,7 +259,7 @@ if ($logueado) {
 
         <p style="color: var(--wf-gray); margin-bottom: 10px;"><?= count($libros) ?> libro(s) encontrado(s)</p>
 
-        <!-- id distinto a "catalog-books" para que main.js no lo sobrescriba -->
+        <!-- Cuadrícula de libros. Usamos id="catalogo-libros" (y no "catalog-books") para que el JS viejo de main.js no borre los datos reales de MySQL -->
         <div class="book-grid" id="catalogo-libros">
             <?php foreach ($libros as $libro): ?>
                 <?php
@@ -245,22 +269,29 @@ if ($logueado) {
                 $precio = ((float)$libro['precio'] == 0) ? 'Gratis' : '$' . number_format((float)$libro['precio'], 2);
                 ?>
                 <div class="book-card">
+                    <!-- Botón para agregar o quitar de favoritos -->
                     <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Favorito" style="color: inherit;">
                         <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
                     </a>
+
+                    <!-- Si el libro tiene portada subida y el archivo existe en la carpeta, la mostramos; si no, sale el cuadro gris -->
                     <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
                         <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
                     <?php else: ?>
                         <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
                     <?php endif; ?>
+
+                    <!-- Todos los textos pasan por htmlspecialchars() para que nadie inyecte código HTML o scripts -->
                     <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor: pointer;">
                         <?= htmlspecialchars($libro['titulo']) ?>
                     </h4>
                     <p style="font-size: 0.8rem; color: var(--wf-gray);"><?= htmlspecialchars($libro['autor']) ?></p>
                     <p style="font-size: 0.75rem; color: var(--wf-gray);"><?= htmlspecialchars($libro['categorias'] ?? '') ?></p>
                     <div class="stars">⭐ <?= htmlspecialchars($rating) ?></div>
+
                     <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                         <strong style="color: #27ae60;"><?= $precio ?></strong>
+                        <!-- Si ya compró este libro lo mandamos a su detalle para descargarlo; si no, lo agregamos al carrito -->
                         <?php if (in_array($id_lib, $mis_comprados, true)): ?>
                             <a href="detalle.php?id=<?= $id_lib ?>" class="btn" title="Ya tienes este libro"><i class="fa-solid fa-check"></i> Comprado</a>
                         <?php else: ?>
@@ -272,6 +303,7 @@ if ($logueado) {
                 </div>
             <?php endforeach; ?>
 
+            <!-- Mensaje cuando ningún libro coincide con los filtros -->
             <?php if (count($libros) === 0): ?>
                 <div class="search-feedback">
                     <p>No se encontraron libros con esos filtros.</p>
@@ -284,6 +316,7 @@ if ($logueado) {
     </section>
 </main>
 
+    <!-- Ventana modal con los formularios de iniciar sesión, registro y recuperación de contraseña -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -303,6 +336,7 @@ if ($logueado) {
                 <p class="auth-toggle">¿No tienes una cuenta? <a onclick="toggleAuthMode('signup')">Regístrate aquí</a></p>
             </form>
 
+            <!-- validarRegistro() revisa en JS que ambas contraseñas coincidan antes de enviar -->
             <form id="signupForm" action="auth/registro.php" method="POST" style="display: none;" onsubmit="return validarRegistro(event)">
                 <h3 style="margin-bottom: 15px;">Crear una Cuenta</h3>
                 <div class="form-group">

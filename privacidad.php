@@ -1,13 +1,20 @@
 <?php
+/*
+ * Página de Aviso de Privacidad de LecturaLibre.
+ * Informa a los usuarios qué datos personales se almacenan en la base de datos,
+ * para qué funciones del sistema se utilizan (pedidos, descargas, favoritos y soporte)
+ * y cómo pueden actualizarlos desde su perfil.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Datos básicos de la sesión para mantener sincronizada la barra de navegación
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
 
-// Contar libros en el carrito real del usuario
+// Si el usuario tiene sesión iniciada, contamos cuántos libros tiene en su carrito
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -17,22 +24,19 @@ if ($logueado) {
     $cart_count = (int)($res_cart['total'] ?? 0);
     $stmt_cart->close();
 }
-
-// Esta página no maneja avisos propios
-$alerta_texto = '';
-$alerta_tipo = '';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aviso de privacidad - LecturaLibre</title>
+    <title>Aviso de Privacidad | LecturaLibre</title>
     <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
@@ -94,56 +98,47 @@ $alerta_tipo = '';
         </div>
     </header>
 
-    <?php if ($alerta_texto !== ''): ?>
-        <div class="container" style="margin-top: 15px;">
-            <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
-                <?= htmlspecialchars($alerta_texto) ?>
-            </div>
-        </div>
-    <?php endif; ?>
-
     <main class="container">
-        <section id="privacidad" class="texto-legal" style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border); line-height: 1.6;">
-            <h2 class="section-title">Aviso de privacidad</h2>
-            <p style="font-size: 0.85rem; color: var(--wf-gray);">Última actualización: noviembre de 2026</p>
+        <article style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border); line-height: 1.65;">
+            <h2 class="section-title">Aviso de Privacidad</h2>
+            <p style="font-size: 0.85rem; color: var(--wf-gray); margin-bottom: 20px;">
+                Última actualización: <?= date('Y') ?>
+            </p>
 
-            <p>LecturaLibre es responsable del tratamiento de los datos personales que nos proporcionas, conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares.</p>
+            <h3 style="margin: 16px 0 8px;">1. Datos personales que recopilamos</h3>
+            <p style="margin-bottom: 12px;">
+                Para brindarte acceso a las funciones de la plataforma, <strong>LecturaLibre</strong> almacena únicamente los datos necesarios para operar tu cuenta: nombre completo, correo electrónico, contraseña cifrada, historial de pedidos, registro de descargas, lista de libros favoritos y, en caso de registrarte como autor, tu nombre artístico y biografía.
+            </p>
 
-            <h3>Datos que recabamos</h3>
-            <ul>
-                <li>Nombre completo y correo electrónico (al registrarte o escribirnos por Contacto).</li>
-                <li>Contraseña, que se guarda cifrada; nadie del equipo puede verla.</li>
-                <li>Historial de pedidos y descargas, libros favoritos y reseñas.</li>
-                <li>En el caso de autores: nombre artístico, biografía y los archivos de sus libros.</li>
-            </ul>
-            <p>No solicitamos datos bancarios ni datos personales sensibles.</p>
-
-            <h3>Para qué usamos tus datos</h3>
-            <ul>
-                <li>Crear y administrar tu cuenta e iniciar sesión.</li>
-                <li>Registrar tus compras y permitirte descargar tus libros.</li>
-                <li>Publicar tus reseñas (solo con tu nombre) y guardar tus favoritos.</li>
-                <li>Responder los mensajes que nos envías y recuperar tu contraseña.</li>
-                <li>Generar estadísticas de descargas por libro y categoría para los autores y administradores, sin mostrar quién descargó cada libro.</li>
+            <h3 style="margin: 16px 0 8px;">2. Finalidad del tratamiento de datos</h3>
+            <p style="margin-bottom: 12px;">
+                La información recopilada se emplea exclusivamente para:
+            </p>
+            <ul style="margin: 0 0 12px 22px;">
+                <li>Autenticar tu inicio de sesión y asignar los permisos correspondientes a tu rol.</li>
+                <li>Conservar tu carrito de selección, tus libros favoritos y el historial de pedidos para futuras descargas.</li>
+                <li>Mostrar tu nombre junto a las reseñas aprobadas que publiques en el catálogo.</li>
+                <li>Dar seguimiento a las consultas o reportes enviados mediante el formulario de contacto.</li>
             </ul>
 
-            <h3>Con quién compartimos tus datos</h3>
-            <p>No vendemos ni compartimos tus datos con terceros, salvo cuando lo requiera una autoridad competente.</p>
+            <h3 style="margin: 16px 0 8px;">3. Seguridad de la información</h3>
+            <p style="margin-bottom: 12px;">
+                Las contraseñas nunca se guardan en texto plano; se protegen mediante algoritmos de cifrado seguro antes de almacenarse en la base de datos. Además, todas las consultas al servidor utilizan parámetros preparados para resguardar la integridad de la información.
+            </p>
 
-            <h3>Cookies</h3>
-            <p>Usamos únicamente la cookie de sesión necesaria para mantenerte conectado mientras navegas. No usamos cookies de publicidad.</p>
+            <h3 style="margin: 16px 0 8px;">4. Uso de sesiones</h3>
+            <p style="margin-bottom: 12px;">
+                El sitio utiliza cookies técnicas de sesión en PHP únicamente para mantener tu cuenta abierta mientras navegas entre páginas. No compartimos ni vendemos tus datos personales a terceros con fines publicitarios.
+            </p>
 
-            <h3>Tus derechos (ARCO)</h3>
-            <p>Puedes pedir Acceso, Rectificación, Cancelación u Oposición al uso de tus datos escribiéndonos desde <a href="contacto.php">Contacto</a> con el asunto "Derechos ARCO". También puedes actualizar tu nombre y contraseña desde tu perfil.</p>
-
-            <h3>Cambios a este aviso</h3>
-            <p>Cualquier cambio se publicará en esta misma página.</p>
-
-            <p>Consulta también los <a href="terminos.php">Términos de uso</a>.</p>
-        </section>
+            <h3 style="margin: 16px 0 8px;">5. Actualización y control de tus datos</h3>
+            <p>
+                Puedes consultar y modificar tu nombre completo, contraseña y datos de autor en cualquier momento desde la sección <a href="perfil.php">Mi Perfil</a>. Si necesitas solicitar la baja de tu cuenta o tienes dudas sobre este aviso, escríbenos a través de <a href="contacto.php">Contacto</a>.
+            </p>
+        </article>
     </main>
 
-
+    <!-- Ventana modal de inicio de sesión, registro y recuperación -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -196,12 +191,12 @@ $alerta_tipo = '';
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
+            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
                     <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
+                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
                 <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
@@ -234,4 +229,4 @@ $alerta_tipo = '';
         </div>
     </footer>
 </body>
-</html>
+</html>

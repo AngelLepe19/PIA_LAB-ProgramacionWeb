@@ -1,39 +1,76 @@
 <?php
+/*
+ * Página de contacto y soporte técnico de LecturaLibre.
+ * Permite tanto a visitantes como a usuarios registrados enviar dudas, sugerencias
+ * o reportes de libros (por ejemplo, cuando llegan desde el botón "Reportar" en detalle.php).
+ * Los mensajes se guardan en la tabla mensajes_contacto con estado 'pendiente' para que
+ * el equipo de trabajadores o administradores los atienda desde su panel.
+ */
 session_start();
 require_once 'config/conexion.php';
 
+// Datos básicos de la sesión activa
 $pagina_actual = basename($_SERVER['PHP_SELF']);
 $logueado = isset($_SESSION['id_usuario']);
 $id_rol = $logueado ? (int)$_SESSION['id_rol'] : 0;
 $nombre_usuario = $logueado ? $_SESSION['nombre_completo'] : '';
-$correo_usuario = $logueado ? ($_SESSION['correo'] ?? '') : '';
 
-// Procesar envío del formulario de contacto
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['enviar_contacto'])) {
+// Si el usuario tiene sesión iniciada, traemos su correo de la base de datos para
+// rellenar automáticamente los campos del formulario y ahorrarle trabajo
+$correo_usuario = '';
+if ($logueado) {
+    $stmt_u = $conn->prepare("SELECT correo FROM usuarios WHERE id_usuario = ?");
+    $stmt_u->bind_param("i", $_SESSION['id_usuario']);
+    $stmt_u->execute();
+    $fila_u = $stmt_u->get_result()->fetch_assoc();
+    $correo_usuario = $fila_u['correo'] ?? '';
+    $stmt_u->close();
+}
+
+// Procesamos el envío del formulario cuando llega por método POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
     $correo = trim($_POST['correo'] ?? '');
     $asunto = trim($_POST['asunto'] ?? '');
     $mensaje = trim($_POST['mensaje'] ?? '');
 
-    if ($nombre === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL) || $asunto === '' || $mensaje === '') {
-        header("Location: contacto.php?error=campos_invalidos");
+    // Validamos que no haya campos vacíos, que el correo tenga formato válido y que no excedan los límites
+    if ($nombre === '' || $correo === '' || $asunto === '' || $mensaje === '') {
+        header('Location: contacto.php?error=campos_vacios');
         exit;
     }
 
-    $stmt = $conn->prepare("INSERT INTO mensajes_contacto (nombre, correo, asunto, mensaje, estado) VALUES (?, ?, ?, ?, 'pendiente')");
-    $stmt->bind_param("ssss", $nombre, $correo, $asunto, $mensaje);
-    $ok = $stmt->execute();
-    $stmt->close();
+    if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+        header('Location: contacto.php?error=correo_invalido');
+        exit;
+    }
 
+    if (mb_strlen($asunto) > 150 || mb_strlen($mensaje) > 1500) {
+        header('Location: contacto.php?error=longitud');
+        exit;
+    }
+
+    // Guardamos el mensaje en la base de datos usando una consulta preparada.
+    // Todos los mensajes nuevos entran con estado 'pendiente' hasta que un moderador los marque como atendidos.
+    $stmt_ins = $conn->prepare("
+        INSERT INTO mensajes_contacto (nombre, correo, asunto, mensaje, estado)
+        VALUES (?, ?, ?, ?, 'pendiente')
+    ");
+    $stmt_ins->bind_param("ssss", $nombre, $correo, $asunto, $mensaje);
+    $ok = $stmt_ins->execute();
+    $stmt_ins->close();
+
+    // Usamos redirección después de guardar (patrón Post-Redirect-Get) para evitar que,
+    // si el usuario recarga la página con F5, el navegador vuelva a enviar el mismo mensaje
     if ($ok) {
-        header("Location: contacto.php?enviado=1");
+        header('Location: contacto.php?enviado=1');
     } else {
-        header("Location: contacto.php?error=error_bd");
+        header('Location: contacto.php?error=bd');
     }
     exit;
 }
 
-// Contar libros en el carrito real del usuario
+// Contamos los artículos en el carrito para mantener actualizado el ícono del encabezado
 $cart_count = 0;
 if ($logueado) {
     $stmt_cart = $conn->prepare("SELECT COUNT(*) AS total FROM carrito WHERE id_usuario = ?");
@@ -44,20 +81,29 @@ if ($logueado) {
     $stmt_cart->close();
 }
 
-// Mensajes de aviso
+// Si el usuario llegó aquí desde el enlace "Reportar" de detalle.php, precargamos el asunto
+$asunto_inicial = isset($_GET['asunto']) && is_string($_GET['asunto']) ? trim($_GET['asunto']) : '';
+
+// Revisamos los parámetros GET para mostrar avisos de confirmación o error
 $alerta_texto = '';
 $alerta_tipo = '';
 if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
-    $alerta_texto = '¡Mensaje enviado con éxito! Un trabajador o administrador revisará tu consulta pronto.';
+    $alerta_texto = '¡Mensaje enviado! Nuestro equipo lo revisará y te responderá a la brevedad.';
     $alerta_tipo = 'exito';
 } elseif (isset($_GET['error'])) {
     $alerta_tipo = 'error';
     switch ($_GET['error']) {
-        case 'campos_invalidos':
-            $alerta_texto = 'Por favor completa todos los campos con un correo electrónico válido.';
+        case 'campos_vacios':
+            $alerta_texto = 'Por favor completa todos los campos del formulario.';
+            break;
+        case 'correo_invalido':
+            $alerta_texto = 'Ingresa una dirección de correo electrónico válida.';
+            break;
+        case 'longitud':
+            $alerta_texto = 'El asunto o el mensaje superan el límite de caracteres permitido.';
             break;
         default:
-            $alerta_texto = 'Ocurrió un error al enviar tu mensaje. Inténtalo de nuevo.';
+            $alerta_texto = 'No se pudo enviar tu mensaje. Inténtalo de nuevo más tarde.';
             break;
     }
 }
@@ -67,12 +113,13 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contacto - LecturaLibre</title>
+    <title>Contacto | LecturaLibre</title>
     <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
 
+    <!-- Barra de navegación principal compartida -->
     <header>
         <div class="container navbar">
             <a href="index.php" class="logo">
@@ -134,6 +181,7 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
         </div>
     </header>
 
+    <!-- Banner de confirmación o error al enviar el mensaje -->
     <?php if ($alerta_texto !== ''): ?>
         <div class="container" style="margin-top: 15px;">
             <div style="padding: 12px 16px; border-radius: 6px; font-size: 0.9rem; background: <?= $alerta_tipo === 'exito' ? '#d4edda' : '#f8d7da' ?>; color: <?= $alerta_tipo === 'exito' ? '#155724' : '#721c24' ?>; border: 1px solid <?= $alerta_tipo === 'exito' ? '#c3e6cb' : '#f5c6cb' ?>;">
@@ -143,36 +191,78 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
     <?php endif; ?>
 
     <main class="container">
-        <section id="contacto">
-            <div style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
-                <h2 class="section-title">Formulario de Contacto</h2>
-                <p style="font-size: 0.9rem; color: var(--wf-gray); margin-bottom: 15px;">
-                    ¿Tienes alguna duda, sugerencia o problema con un libro? Escríbenos y nuestro equipo lo atenderá.
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 25px;">
+            <!-- Formulario principal que se envía a esta misma página -->
+            <section style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+                <h2 class="section-title">Contáctanos</h2>
+                <p style="font-size: 0.92rem; color: var(--wf-gray); margin-bottom: 18px;">
+                    ¿Tienes dudas sobre alguna descarga, problemas con tu cuenta o quieres reportar un libro? Escríbenos y te ayudaremos.
                 </p>
-                <form action="contacto.php" method="POST" style="display: flex; flex-direction: column; gap: 12px; max-width: 520px;">
-                    <input type="hidden" name="enviar_contacto" value="1">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="cnt-name">Tu Nombre *</label>
-                        <input type="text" id="cnt-name" name="nombre" maxlength="100" value="<?= htmlspecialchars($nombre_usuario) ?>" placeholder="Tu Nombre" required>
+
+                <form action="contacto.php" method="POST">
+                    <div class="form-group">
+                        <label for="contacto-nombre">Tu nombre</label>
+                        <input type="text" id="contacto-nombre" name="nombre" required maxlength="100"
+                               placeholder="Nombre completo" value="<?= htmlspecialchars($nombre_usuario) ?>">
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="cnt-email">Correo Electrónico *</label>
-                        <input type="email" id="cnt-email" name="correo" maxlength="120" value="<?= htmlspecialchars($correo_usuario) ?>" placeholder="tu@correo.com" required>
+
+                    <div class="form-group">
+                        <label for="contacto-correo">Correo electrónico</label>
+                        <input type="email" id="contacto-correo" name="correo" required maxlength="120"
+                               placeholder="tu@correo.com" value="<?= htmlspecialchars($correo_usuario) ?>">
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="cnt-subject">Asunto *</label>
-                        <input type="text" id="cnt-subject" name="asunto" maxlength="150" value="<?= htmlspecialchars($_GET['asunto'] ?? '') ?>" placeholder="Asunto de tu consulta" required>
+
+                    <div class="form-group">
+                        <label for="contacto-asunto">Asunto</label>
+                        <input type="text" id="contacto-asunto" name="asunto" required maxlength="150"
+                               placeholder="Ej. Consulta sobre descarga o reporte de libro"
+                               value="<?= htmlspecialchars($asunto_inicial) ?>">
                     </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="cnt-message">Mensaje *</label>
-                        <textarea id="cnt-message" name="mensaje" placeholder="Escribe tu mensaje aquí..." rows="4" required></textarea>
+
+                    <div class="form-group">
+                        <label for="contacto-mensaje">Mensaje</label>
+                        <textarea id="contacto-mensaje" name="mensaje" rows="5" required maxlength="1500"
+                                  placeholder="Describe tu consulta o reporte con el mayor detalle posible..."></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary" style="align-self: flex-start;">Enviar Mensaje</button>
+
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fa-solid fa-paper-plane"></i> Enviar Mensaje
+                    </button>
                 </form>
-            </div>
-        </section>
+            </section>
+
+            <!-- Columna lateral con canales de atención y preguntas frecuentes -->
+            <aside style="background: white; padding: 25px; border-radius: var(--radius); border: 1px solid var(--wf-border);">
+                <h3 style="margin-bottom: 15px;">Información de Soporte</h3>
+                <p style="font-size: 0.9rem; margin-bottom: 12px;">
+                    <i class="fa-solid fa-envelope"></i> <strong>Correo general:</strong> soporte@lecturalibre.local
+                </p>
+                <p style="font-size: 0.9rem; margin-bottom: 20px;">
+                    <i class="fa-solid fa-clock"></i> <strong>Horario de atención:</strong> Lunes a viernes de 9:00 a 18:00 hrs.
+                </p>
+
+                <hr style="margin: 18px 0;">
+
+                <h4 style="margin-bottom: 10px;">Preguntas Frecuentes</h4>
+                <div style="font-size: 0.88rem; color: var(--wf-gray); line-height: 1.55;">
+                    <p style="margin-bottom: 10px;">
+                        <strong style="color: #222;">¿Dónde descargo un libro que ya pedí?</strong><br>
+                        Ingresa a <a href="perfil.php">Mi Perfil</a>; en la sección de pedidos encontrarás el botón para descargar cada archivo PDF en cualquier momento.
+                    </p>
+                    <p style="margin-bottom: 10px;">
+                        <strong style="color: #222;">¿Cuánto tarda en aprobarse mi libro o reseña?</strong><br>
+                        Nuestro equipo revisa las solicitudes en un plazo habitual de 24 a 48 horas hábiles.
+                    </p>
+                    <p>
+                        <strong style="color: #222;">¿Cómo reporto un problema de derechos de autor?</strong><br>
+                        Usa este formulario indicando el título exacto del libro y los motivos de tu solicitud.
+                    </p>
+                </div>
+            </aside>
+        </div>
     </main>
 
+    <!-- Ventana modal de inicio de sesión, registro y recuperación -->
     <div class="modal-overlay" id="authModal">
         <div class="modal">
             <span class="close-modal" onclick="closeAuthModal()">&times;</span>
@@ -225,12 +315,12 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
 
-            <form id="recoverForm" action="auth/recuperar.php" method="POST" style="display: none;">
+            <form id="recoverForm" style="display: none;" onsubmit="handleRecoverPass(event)">
                 <h3 style="margin-bottom: 15px;">Recuperar Contraseña</h3>
                 <p style="font-size:0.85rem; color: var(--wf-gray); margin-bottom:15px;">Ingresa tu correo registrado para enviarte un enlace de restablecimiento.</p>
                 <div class="form-group">
                     <label>Correo Electrónico</label>
-                    <input type="email" name="correo" id="recover-email" placeholder="usuario@correo.com" required>
+                    <input type="email" id="recover-email" placeholder="usuario@correo.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Enviar Correo</button>
                 <p class="auth-toggle"><a onclick="toggleAuthMode('login')">&larr; Volver a inicio de sesión</a></p>
@@ -263,4 +353,4 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
         </div>
     </footer>
 </body>
-</html>
+</html>
