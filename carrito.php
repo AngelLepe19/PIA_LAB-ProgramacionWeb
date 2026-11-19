@@ -48,6 +48,9 @@ if (isset($_GET['registro']) && $_GET['registro'] === 'exitoso') {
         case 'sin_permiso':
             $alerta_texto = 'No tienes acceso a ese archivo.';
             break;
+        case 'ya_comprado':
+            $alerta_texto = 'Los libros de tu carrito ya los habías comprado. Puedes descargarlos desde su página.';
+            break;
         default:
             $alerta_texto = 'Ocurrió un error al procesar tu solicitud.';
             break;
@@ -82,7 +85,7 @@ if ($logueado) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Carrito | LecturaLibre</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -226,6 +229,17 @@ if ($logueado) {
                     <label for="signup-password-confirm">Confirmar contraseña</label>
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
+                    </select>
+                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
@@ -259,6 +273,10 @@ if ($logueado) {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>

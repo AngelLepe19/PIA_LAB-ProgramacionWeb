@@ -96,6 +96,10 @@
         .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; margin-bottom: 40px; }
         .book-card { background: var(--wf-white); border: 1px solid var(--wf-border); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; position: relative; }
         .book-card-img { width: 100%; height: 200px; margin-bottom: 10px; }
+        img.book-card-img { display: block; object-fit: cover; border-radius: var(--radius); cursor: pointer; }
+        .texto-legal h3 { margin: 18px 0 6px; }
+        .texto-legal ul { padding-left: 22px; }
+        .portada-detalle { width: 200px; height: 280px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--wf-border); }
         .wishlist-icon { position: absolute; top: 20px; right: 20px; font-size: 1.2rem; color: #e74c3c; cursor: pointer; background: white; padding: 5px; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         .stars { color: #f1c40f; margin: 5px 0; }
 

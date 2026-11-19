@@ -12,21 +12,31 @@ $id_usuario = (int)$_SESSION['id_usuario'];
 // Transacción: se guarda todo el pedido o no se guarda nada
 $conn->begin_transaction();
 try {
-    // 1. Libros del carrito con su precio actual
+    // 1. Libros del carrito con su precio actual (se saltan los que ya compró antes)
     $stmt = $conn->prepare("
         SELECT c.id_libro, l.precio
         FROM carrito c
         INNER JOIN libros l ON c.id_libro = l.id_libro
         WHERE c.id_usuario = ? AND l.estado = 'aprobado'
+          AND NOT EXISTS (
+              SELECT 1 FROM detalle_pedido dp
+              INNER JOIN pedidos p ON p.id_pedido = dp.id_pedido
+              WHERE p.id_usuario = ? AND dp.id_libro = c.id_libro AND p.estado <> 'cancelado'
+          )
     ");
-    $stmt->bind_param("i", $id_usuario);
+    $stmt->bind_param("ii", $id_usuario, $id_usuario);
     $stmt->execute();
     $items = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
 
     if (count($items) === 0) {
-        $conn->rollback();
-        header("Location: ../carrito.php");
+        // Puede que solo quedaran libros ya comprados: se limpian del carrito
+        $stmt_del = $conn->prepare("DELETE FROM carrito WHERE id_usuario = ?");
+        $stmt_del->bind_param("i", $id_usuario);
+        $stmt_del->execute();
+        $stmt_del->close();
+        $conn->commit();
+        header("Location: ../carrito.php?error=ya_comprado");
         exit;
     }
 

@@ -68,7 +68,7 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contacto - LecturaLibre</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -161,7 +161,7 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label for="cnt-subject">Asunto *</label>
-                        <input type="text" id="cnt-subject" name="asunto" maxlength="150" placeholder="Asunto de tu consulta" required>
+                        <input type="text" id="cnt-subject" name="asunto" maxlength="150" value="<?= htmlspecialchars($_GET['asunto'] ?? '') ?>" placeholder="Asunto de tu consulta" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label for="cnt-message">Mensaje *</label>
@@ -210,6 +210,17 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
                     <label for="signup-password-confirm">Confirmar contraseña</label>
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
+                    </select>
+                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
@@ -243,9 +254,13 @@ if (isset($_GET['enviado']) && $_GET['enviado'] === '1') {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>
     </footer>
 </body>
-</html>
+</html>

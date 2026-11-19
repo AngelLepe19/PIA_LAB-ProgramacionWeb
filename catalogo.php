@@ -96,7 +96,6 @@ if ($id_categoria > 0) {
 }
 
 $sql .= " ORDER BY " . $ordenes[$orden];
-
 $stmt = $conn->prepare($sql);
 if ($tipos !== '') {
     $stmt->bind_param($tipos, ...$params);
@@ -114,6 +113,20 @@ if ($logueado) {
     $mis_favoritos = array_map('intval', array_column($stmt_fav->get_result()->fetch_all(MYSQLI_ASSOC), 'id_libro'));
     $stmt_fav->close();
 }
+
+// Libros que el usuario ya compró (no se pueden volver a agregar al carrito)
+$mis_comprados = [];
+if ($logueado) {
+    $stmt_comp = $conn->prepare("
+        SELECT DISTINCT dp.id_libro FROM detalle_pedido dp
+        INNER JOIN pedidos p ON p.id_pedido = dp.id_pedido
+        WHERE p.id_usuario = ? AND p.estado <> 'cancelado'
+    ");
+    $stmt_comp->bind_param("i", $_SESSION['id_usuario']);
+    $stmt_comp->execute();
+    $mis_comprados = array_map('intval', array_column($stmt_comp->get_result()->fetch_all(MYSQLI_ASSOC), 'id_libro'));
+    $stmt_comp->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -121,7 +134,7 @@ if ($logueado) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LecturaLibre - Plataforma Gratuita</title>
-    <link rel="stylesheet" href="assets/css/estilos.css?v=4">
+    <link rel="stylesheet" href="assets/css/estilos.css?v=5">
     <script src="assets/js/main.js"></script>
 </head>
 <body>
@@ -235,7 +248,11 @@ if ($logueado) {
                     <a href="php/favorito_toggle.php?id_libro=<?= $id_lib ?>" title="Favorito" style="color: inherit;">
                         <i class="<?= $es_fav ? 'fa-solid' : 'fa-regular' ?> fa-heart wishlist-icon"></i>
                     </a>
-                    <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                    <?php if (!empty($libro['portada']) && is_file(__DIR__ . '/' . $libro['portada'])): ?>
+                        <img src="<?= htmlspecialchars($libro['portada']) ?>" alt="Portada de <?= htmlspecialchars($libro['titulo']) ?>" class="book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">
+                    <?php else: ?>
+                        <div class="placeholder-box book-card-img" onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'">PORTADA</div>
+                    <?php endif; ?>
                     <h4 onclick="window.location.href='detalle.php?id=<?= $id_lib ?>'" style="cursor: pointer;">
                         <?= htmlspecialchars($libro['titulo']) ?>
                     </h4>
@@ -244,9 +261,13 @@ if ($logueado) {
                     <div class="stars">⭐ <?= htmlspecialchars($rating) ?></div>
                     <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                         <strong style="color: #27ae60;"><?= $precio ?></strong>
-                        <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
-                            <i class="fa-solid fa-cart-shopping"></i>
-                        </a>
+                        <?php if (in_array($id_lib, $mis_comprados, true)): ?>
+                            <a href="detalle.php?id=<?= $id_lib ?>" class="btn" title="Ya tienes este libro"><i class="fa-solid fa-check"></i> Comprado</a>
+                        <?php else: ?>
+                            <a href="php/carrito_agregar.php?id_libro=<?= $id_lib ?>" class="btn" title="Agregar al carrito">
+                                <i class="fa-solid fa-cart-shopping"></i>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -300,6 +321,17 @@ if ($logueado) {
                     <label for="signup-password-confirm">Confirmar contraseña</label>
                     <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="••••••••" required>
                 </div>
+                <div class="form-group">
+                    <label for="signup-tipo">Tipo de cuenta</label>
+                    <select name="tipo_cuenta" id="signup-tipo">
+                        <option value="lector">Lector</option>
+                        <option value="autor">Autor (quiero publicar mis libros)</option>
+                    </select>
+                </div>
+                <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 0.85rem; margin-bottom: 15px;">
+                    <input type="checkbox" name="acepto_terminos" value="1" required style="width: auto; margin-top: 3px;">
+                    <span>Acepto los <a href="terminos.php" target="_blank">Términos de uso</a> y el <a href="privacidad.php" target="_blank">Aviso de privacidad</a>.</span>
+                </label>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Registrarse</button>
                 <p class="auth-toggle">¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a></p>
             </form>
@@ -333,6 +365,10 @@ if ($logueado) {
                     <a href="catalogo.php">Catálogo</a>
                     <span aria-hidden="true"> | </span>
                     <a href="contacto.php">Contacto</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="terminos.php">Términos</a>
+                    <span aria-hidden="true"> | </span>
+                    <a href="privacidad.php">Privacidad</a>
                 </p>
             </nav>
         </div>
