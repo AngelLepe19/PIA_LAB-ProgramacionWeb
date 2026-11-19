@@ -4,6 +4,7 @@ $hdrUser = usuario_actual();
 $hdrTabs = [
     'reportes'   => ['Reportes',            'reportes.php',   ['Administrador']],
     'libros'     => ['Libros / Inventario', 'libros.php',     ['Administrador', 'Autor', 'Trabajador']],
+    'ventas'     => ['Ventas',              'ventas.php',     ['Administrador', 'Autor']],
     'categorias' => ['Categorías',          'categorias.php', ['Administrador']],
     'usuarios'   => ['Usuarios / Roles',    'usuarios.php',   ['Administrador']],
     'resenas'    => ['Moderación Reseñas',  'resenas.php',    ['Administrador', 'Trabajador']],
