@@ -2,9 +2,11 @@
 declare(strict_types=1);
 /** CRUD 2 (parte 1) — Categorías / géneros literarios. Solo Administrador. */
 require_once __DIR__ . '/inc/bootstrap.php';
+// Acceso restringido únicamente al rol Administrador
 require_rol(['Administrador']);
 $pdo = db();
 
+// Procesa altas, ediciones y bajas de categorías enviadas por POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $accion = $_POST['accion'] ?? '';
@@ -14,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         if ($accion === 'crear' || $accion === 'editar') {
+            // Validación de campos obligatorios y límites de caracteres
             if ($nombre === '' || mb_strlen($nombre) > 50) {
                 throw new InvalidArgumentException('El nombre es obligatorio (máximo 50 caracteres).');
             }
@@ -28,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', 'Categoría actualizada.');
             }
         } elseif ($accion === 'eliminar') {
+            // Verifica que ningún libro esté usando la categoría antes de borrarla
             $st = $pdo->prepare('SELECT COUNT(*) FROM libro_categoria WHERE id_categoria = ?');
             $st->execute([$id]);
             if ((int)$st->fetchColumn() > 0) {
@@ -41,12 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (InvalidArgumentException $ex) {
         flash('danger', $ex->getMessage());
     } catch (PDOException $ex) {
+        // Controla nombres de categoría duplicados
         flash('danger', es_duplicado($ex) ? 'Ya existe una categoría con ese nombre.' : 'No se pudo completar la operación.');
         if (!es_duplicado($ex)) error_log($ex->getMessage());
     }
     redirect('categorias.php');
 }
 
+// Consulta todas las categorías junto con el conteo de libros asociados mediante LEFT JOIN
 $categorias = $pdo->query(
     'SELECT c.id_categoria, c.nombre, c.descripcion, COUNT(lc.id_libro) AS total_libros
        FROM categorias c LEFT JOIN libro_categoria lc ON lc.id_categoria = c.id_categoria
@@ -58,6 +64,7 @@ $titulo = 'Categorías';
 $tab = 'categorias';
 require __DIR__ . '/inc/header.php';
 ?>
+<!-- Formulario rápido en línea para registrar una nueva categoría -->
 <form method="post" class="row g-2 mb-3 no-print">
     <?= csrf_field() ?>
     <input type="hidden" name="accion" value="crear">
@@ -66,6 +73,7 @@ require __DIR__ . '/inc/header.php';
     <div class="col-auto"><button class="btn btn-oscuro btn-sm">Añadir</button></div>
 </form>
 
+<!-- Tabla de categorías existentes y total de libros por género -->
 <div class="table-responsive">
 <table class="table table-sm table-bordered bg-white align-middle">
     <thead><tr><th>Categoría</th><th>Descripción</th><th>Libros</th><th class="text-end">Acciones</th></tr></thead>
@@ -108,6 +116,8 @@ require __DIR__ . '/inc/header.php';
         <div class="modal-footer"><button class="btn btn-ll">Guardar</button></div>
     </form></div>
 </div>
+
+<!-- Carga los datos de la categoría seleccionada en el modal de edición -->
 <script>
 document.getElementById('modalEditar').addEventListener('show.bs.modal', function (ev) {
     var b = ev.relatedTarget;

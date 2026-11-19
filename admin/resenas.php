@@ -2,11 +2,13 @@
 declare(strict_types=1);
 /** Panel de moderación de reseñas: aprobar o rechazar. Administrador y Trabajador. */
 require_once __DIR__ . '/inc/bootstrap.php';
+// Permite acceso a Administradores y Trabajadores
 $u = require_rol(['Administrador', 'Trabajador']);
 $pdo = db();
 
 $estadosValidos = ['pendiente', 'aprobada', 'rechazada'];
 
+// Procesamiento de aprobación o rechazo de una reseña específica (identificada por libro + usuario)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $idLibro = (int)($_POST['id_libro'] ?? 0);
@@ -17,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($nuevo === null || $idLibro <= 0 || $idUsuario <= 0) {
         flash('danger', 'Acción o identificador de reseña no válido.');
     } else {
+        // Actualiza el estado de la reseña y deja constancia del moderador y la fecha
         $st = $pdo->prepare(
             'UPDATE resenas
                 SET estado = ?, id_moderador = ?, fecha_moderacion = NOW()
@@ -31,15 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('resenas.php?' . http_build_query(['estado' => $_POST['estado'] ?? 'pendiente']));
 }
 
+// Filtro activo por estado de moderación (pendiente por defecto)
 $estado = (string)($_GET['estado'] ?? 'pendiente');
 if (!in_array($estado, $estadosValidos, true)) {
     $estado = 'pendiente';
 }
 
+// Conteo total para paginación
 $st = $pdo->prepare('SELECT COUNT(*) FROM resenas WHERE estado = ?');
 $st->execute([$estado]);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
+// Consulta paginada de reseñas con el título del libro, nombre del lector y del moderador
 $st = $pdo->prepare(
     'SELECT r.id_libro, r.id_usuario, r.puntuacion, r.comentario, r.fecha_creacion, r.estado, r.fecha_moderacion,
             l.titulo, us.nombre_completo AS lector, mo.nombre_completo AS moderador
@@ -54,12 +60,14 @@ $st = $pdo->prepare(
 $st->execute([$estado]);
 $resenas = $st->fetchAll();
 
+// Conteo agrupado por estado para mostrar los contadores en las pestañas superiores
 $conteos = $pdo->query('SELECT estado, COUNT(*) n FROM resenas GROUP BY estado')->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $titulo = 'Moderación de reseñas';
 $tab = 'resenas';
 require __DIR__ . '/inc/header.php';
 ?>
+<!-- Pestañas de navegación rápida con contadores por estado -->
 <ul class="nav nav-pills mb-3 no-print">
     <?php foreach ($estadosValidos as $es): ?>
         <li class="nav-item">
@@ -70,6 +78,7 @@ require __DIR__ . '/inc/header.php';
     <?php endforeach; ?>
 </ul>
 
+<!-- Tabla de reseñas y acciones de moderación -->
 <div class="table-responsive">
 <table class="table table-sm table-bordered bg-white align-middle">
     <thead><tr><th>Libro</th><th>Lector</th><th>Calificación</th><th>Comentario</th><th>Fecha</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>

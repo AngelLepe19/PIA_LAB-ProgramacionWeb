@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+/**
+ * Panel de reportes estadísticos e indicadores generales de la plataforma.
+ * Exclusivo para el rol Administrador; incluye opción de impresión limpia.
+ */
 require_once __DIR__ . '/inc/bootstrap.php';
 require_rol(['Administrador']);
 
@@ -25,6 +29,7 @@ function tabla_desde_vista(array $filas, string $vacio): void
         return;
     }
     echo '<div class="table-responsive"><table class="table table-sm table-bordered bg-white align-middle"><thead><tr>';
+    // Genera los encabezados tomando las llaves del primer registro de la vista
     foreach (array_keys($filas[0]) as $col) {
         echo '<th>' . e(ucfirst(str_replace('_', ' ', $col))) . '</th>';
     }
@@ -43,6 +48,7 @@ $titulo = 'Reportes';
 $tab = 'reportes';
 require __DIR__ . '/inc/header.php';
 ?>
+<!-- Encabezado del reporte con fecha de generación y botón para imprimir/exportar a PDF -->
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h2 class="h5 fw-bold mb-0">Reporte de Descargas y Plataforma</h2>
@@ -51,6 +57,7 @@ require __DIR__ . '/inc/header.php';
     <button class="btn btn-oscuro btn-sm no-print" onclick="window.print()">🖨 Imprimir reporte</button>
 </div>
 
+<!-- Tarjetas con los 4 indicadores clave (KPI) de la plataforma -->
 <div class="row g-3 mb-4">
     <?php foreach ($kpi as $etiqueta => $valor): ?>
         <div class="col-6 col-md-3">
@@ -59,6 +66,7 @@ require __DIR__ . '/inc/header.php';
     <?php endforeach; ?>
 </div>
 
+<!-- Tablas alimentadas directamente por las vistas SQL de la base de datos -->
 <h3 class="h6 fw-bold">Descargas totales por categoría</h3>
 <?php tabla_desde_vista($porCategoria, 'Aún no hay categorías con información.'); ?>
 

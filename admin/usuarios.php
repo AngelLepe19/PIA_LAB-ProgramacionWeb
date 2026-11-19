@@ -6,13 +6,16 @@ declare(strict_types=1);
  * (no se borra físicamente para conservar el historial de pedidos).
  */
 require_once __DIR__ . '/inc/bootstrap.php';
+// Verifica que exista sesión activa y que el usuario tenga rol de Administrador
 $yo = require_rol(['Administrador']);
 $pdo = db();
 
+// Carga el catálogo de roles disponibles para poblar los filtros y formularios
 $roles = $pdo->query('SELECT id_rol, nombre FROM roles ORDER BY id_rol')->fetchAll();
 $idsRol = array_map(fn($r) => (int)$r['id_rol'], $roles);
 $estadosValidos = ['pendiente', 'activo', 'inactivo'];
 
+// Procesamiento de acciones enviadas por formulario (crear, editar, activar o desactivar cuentas)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $accion = $_POST['accion'] ?? '';
@@ -20,18 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         if ($accion === 'crear' || $accion === 'editar') {
+            // Sanitización y lectura de los datos recibidos del modal
             $nombre = trim((string)($_POST['nombre_completo'] ?? ''));
             $correo = trim((string)($_POST['correo'] ?? ''));
             $idRol  = (int)($_POST['id_rol'] ?? 0);
             $estado = (string)($_POST['estado'] ?? 'activo');
             $clave  = (string)($_POST['contrasena'] ?? '');
 
+            // Validaciones de longitud, formato de correo, rol y estado permitidos
             if ($nombre === '' || mb_strlen($nombre) > 100) throw new InvalidArgumentException('El nombre es obligatorio (máximo 100 caracteres).');
             if (!filter_var($correo, FILTER_VALIDATE_EMAIL) || mb_strlen($correo) > 120) throw new InvalidArgumentException('Escribe un correo válido.');
             if (!in_array($idRol, $idsRol, true)) throw new InvalidArgumentException('Selecciona un rol válido.');
             if (!in_array($estado, $estadosValidos, true)) throw new InvalidArgumentException('Estado no válido.');
 
             if ($accion === 'crear') {
+                // Al crear un usuario nuevo la contraseña es obligatoria y se guarda cifrada con BCRYPT
                 if (mb_strlen($clave) < 8) throw new InvalidArgumentException('La contraseña debe tener al menos 8 caracteres.');
                 $pdo->prepare('INSERT INTO usuarios (nombre_completo, correo, contrasena_hash, id_rol, estado, fecha_registro) VALUES (?,?,?,?,?,NOW())')
                     ->execute([$nombre, $correo, password_hash($clave, PASSWORD_BCRYPT), $idRol, $estado]);
@@ -47,8 +53,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if ($clave !== '' && mb_strlen($clave) < 8) throw new InvalidArgumentException('La nueva contraseña debe tener al menos 8 caracteres.');
 
+                // Actualiza los datos generales del usuario
                 $pdo->prepare('UPDATE usuarios SET nombre_completo=?, correo=?, id_rol=?, estado=? WHERE id_usuario=?')
                     ->execute([$nombre, $correo, $idRol, $estado, $id]);
+                // Solo reemplaza la contraseña si se escribió una nueva en el formulario
                 if ($clave !== '') {
                     $pdo->prepare('UPDATE usuarios SET contrasena_hash=? WHERE id_usuario=?')
                         ->execute([password_hash($clave, PASSWORD_BCRYPT), $id]);
@@ -56,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', 'Usuario actualizado.');
             }
         } elseif ($accion === 'desactivar' || $accion === 'activar') {
+            // Impide que el administrador en sesión desactive su propia cuenta
             if ($id === (int)$yo['id']) throw new InvalidArgumentException('No puedes cambiar el estado de tu propia cuenta.');
             $pdo->prepare('UPDATE usuarios SET estado = ? WHERE id_usuario = ?')
                 ->execute([$accion === 'activar' ? 'activo' : 'inactivo', $id]);
@@ -66,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (InvalidArgumentException $ex) {
         flash('danger', $ex->getMessage());
     } catch (PDOException $ex) {
+        // Detecta violaciones de clave única (correo repetido) para mostrar un mensaje claro
         flash('danger', es_duplicado($ex) ? 'Ya existe un usuario con ese correo.' : 'No se pudo completar la operación.');
         if (!es_duplicado($ex)) error_log($ex->getMessage());
     }
@@ -73,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ---------- Listado ---------- */
+// Construcción dinámica de filtros de búsqueda por texto, rol y estado
 $q = trim((string)($_GET['q'] ?? ''));
 $fRol = (int)($_GET['rol'] ?? 0);
 $fEstado = (string)($_GET['estado'] ?? '');
@@ -83,10 +94,12 @@ if ($fRol > 0) { $where[] = 'u.id_rol = ?'; $params[] = $fRol; }
 if (in_array($fEstado, $estadosValidos, true)) { $where[] = 'u.estado = ?'; $params[] = $fEstado; }
 $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// Total de registros filtrados para calcular la paginación
 $st = $pdo->prepare("SELECT COUNT(*) FROM usuarios u $sqlWhere");
 $st->execute($params);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
+// Consulta paginada de usuarios junto con el nombre de su rol
 $st = $pdo->prepare(
     "SELECT u.id_usuario, u.nombre_completo, u.correo, u.id_rol, r.nombre AS rol, u.estado, u.fecha_registro
        FROM usuarios u JOIN roles r ON r.id_rol = u.id_rol
@@ -99,6 +112,7 @@ $titulo = 'Usuarios / Roles';
 $tab = 'usuarios';
 require __DIR__ . '/inc/header.php';
 
+/** Genera el HTML de un elemento <select> con todos los roles registrados. */
 function selector_roles(array $roles, string $id): string
 {
     $h = '<select name="id_rol" id="' . $id . '" class="form-select" required>';
@@ -108,6 +122,7 @@ function selector_roles(array $roles, string $id): string
     return $h . '</select>';
 }
 ?>
+<!-- Barra de filtros de búsqueda y botón para abrir el modal de alta -->
 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
     <form class="d-flex gap-2 no-print" method="get">
         <input type="search" name="q" value="<?= e($q) ?>" class="form-control form-control-sm" placeholder="Nombre o correo">
@@ -128,6 +143,7 @@ function selector_roles(array $roles, string $id): string
     <button class="btn btn-oscuro btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrear">+ Nuevo usuario</button>
 </div>
 
+<!-- Tabla principal de usuarios registrados -->
 <div class="table-responsive">
 <table class="table table-sm table-bordered bg-white align-middle">
     <thead><tr><th>ID</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Registro</th><th class="text-end">Acciones</th></tr></thead>
@@ -142,9 +158,11 @@ function selector_roles(array $roles, string $id): string
             <td><?= badge_estado($x['estado']) ?></td>
             <td><?= e(substr((string)$x['fecha_registro'], 0, 10)) ?></td>
             <td class="text-end text-nowrap">
+                <!-- Botón que pasa los datos del usuario mediante atributos data-* al modal de edición -->
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#modalEditar"
                         data-id="<?= (int)$x['id_usuario'] ?>" data-nombre="<?= e($x['nombre_completo']) ?>" data-correo="<?= e($x['correo']) ?>"
                         data-rol="<?= (int)$x['id_rol'] ?>" data-estado="<?= e($x['estado']) ?>">Editar</button>
+                <!-- Solo se muestran acciones de activación/desactivación para cuentas distintas a la propia -->
                 <?php if (!$esYo): ?>
                     <form method="post" class="d-inline">
                         <?= csrf_field() ?>
@@ -195,6 +213,8 @@ function selector_roles(array $roles, string $id): string
     </div>
     <div class="modal-footer"><button class="btn btn-ll">Guardar cambios</button></div>
 </form></div></div>
+
+<!-- Rellena dinámicamente los campos del modal de edición cuando se abre -->
 <script>
 document.getElementById('modalEditar').addEventListener('show.bs.modal', function (ev) {
     var d = ev.relatedTarget.dataset;

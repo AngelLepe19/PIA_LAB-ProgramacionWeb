@@ -25,7 +25,7 @@ if ($logueado) {
 // total de libros aprobados, autores registrados y lectores activos
 $total_libros = (int)($conn->query("SELECT COUNT(*) AS total FROM libros WHERE estado = 'aprobado'")->fetch_assoc()['total'] ?? 0);
 $total_autores = (int)($conn->query("SELECT COUNT(*) AS total FROM autores")->fetch_assoc()['total'] ?? 0);
-$total_lectores = (int)($conn->query("SELECT COUNT(*) AS total FROM usuarios WHERE activo = 1")->fetch_assoc()['total'] ?? 0);
+$total_lectores = (int)($conn->query("SELECT COUNT(*) AS total FROM usuarios WHERE estado = 'activo'")->fetch_assoc()['total'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="es">

@@ -8,6 +8,7 @@ declare(strict_types=1);
  *  - Trabajador: ve todos y puede aprobar / rechazar los pendientes (no edita ni da de baja).
  */
 require_once __DIR__ . '/inc/bootstrap.php';
+// Permite entrada a los tres roles con acceso al panel
 $u = require_rol(['Administrador', 'Autor', 'Trabajador']);
 $pdo = db();
 
@@ -28,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion  = $_POST['accion'] ?? '';
     $idLibro = (int)($_POST['id_libro'] ?? 0);
 
+    // Verifica que el libro exista antes de aplicar cualquier cambio de estado
     $st = $pdo->prepare('SELECT id_libro, id_autor, estado FROM libros WHERE id_libro = ?');
     $st->execute([$idLibro]);
     $libro = $st->fetch();
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('libros.php');
     }
 
+    // Cálculo de permisos según la propiedad del libro y el rol del usuario activo
     $esDueno = $miAutor !== null && (int)$libro['id_autor'] === $miAutor;
     $puedeRevisar = es_rol($u, 'Administrador', 'Trabajador');
     $puedeGestionar = es_rol($u, 'Administrador') || $esDueno;
@@ -44,18 +47,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($accion) {
         case 'aprobar':
         case 'rechazar':
+            // Solo Administradores y Trabajadores pueden aprobar o rechazar obras
             if (!$puedeRevisar) { http_response_code(403); exit('Sin permiso.'); }
             if ($libro['estado'] !== 'pendiente' && !($accion === 'aprobar' && $libro['estado'] === 'rechazado')) {
                 flash('warning', 'Solo se pueden revisar libros en estado pendiente.');
                 break;
             }
             $nuevo = $accion === 'aprobar' ? 'aprobado' : 'rechazado';
+            // Guarda el estado, el identificador del revisor y la fecha de revisión
             $pdo->prepare('UPDATE libros SET estado = ?, id_revisor = ?, fecha_revision = NOW() WHERE id_libro = ?')
                 ->execute([$nuevo, $u['id'], $idLibro]);
             flash('success', 'Libro ' . ($nuevo === 'aprobado' ? 'aprobado.' : 'rechazado.'));
             break;
 
         case 'baja':
+            // Baja lógica del catálogo (solo Administrador o el Autor dueño de la obra)
             if (!$puedeGestionar) { http_response_code(403); exit('Sin permiso.'); }
             $pdo->prepare("UPDATE libros SET estado = 'baja' WHERE id_libro = ?")->execute([$idLibro]);
             flash('success', 'El libro se dio de baja del catálogo.');
@@ -72,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         default:
             flash('danger', 'Acción no válida.');
     }
+    // Redirige conservando los filtros y la página actual
     redirect('libros.php?' . http_build_query(array_filter([
         'q' => $_POST['q'] ?? '', 'estado' => $_POST['estado'] ?? '', 'p' => $_POST['p'] ?? '',
     ])));
@@ -99,10 +106,12 @@ if (in_array($estado, $estadosValidos, true)) {
 }
 $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// Conteo total para paginación
 $st = $pdo->prepare("SELECT COUNT(*) FROM libros l JOIN autores a ON a.id_autor = l.id_autor $sqlWhere");
 $st->execute($params);
 [$pagina, $paginas, $offset] = paginar((int)$st->fetchColumn(), (int)($_GET['p'] ?? 1));
 
+// Consulta principal con subconsultas para concatenar categorías y contar descargas por libro
 $sql = "SELECT l.id_libro, l.titulo, l.isbn, l.precio, l.copias_disponibles, l.lecturas_acumuladas,
                l.estado, l.portada, l.archivo_pdf, a.nombre_artistico AS autor,
                (SELECT GROUP_CONCAT(c.nombre ORDER BY c.nombre SEPARATOR ', ')
@@ -122,6 +131,7 @@ $titulo = 'Libros / Inventario';
 $tab = 'libros';
 require __DIR__ . '/inc/header.php';
 ?>
+<!-- Barra de búsqueda por título/autor/ISBN, filtro de estado y botón de alta -->
 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
     <form class="d-flex gap-2 no-print" method="get">
         <input type="search" name="q" value="<?= e($q) ?>" class="form-control form-control-sm" placeholder="Título, autor o ISBN">
@@ -138,6 +148,7 @@ require __DIR__ . '/inc/header.php';
     <?php endif; ?>
 </div>
 
+<!-- Tabla de inventario de libros -->
 <div class="table-responsive">
 <table class="table table-sm table-bordered bg-white align-middle">
     <thead>
@@ -174,6 +185,7 @@ require __DIR__ . '/inc/header.php';
                     <input type="hidden" name="estado" value="<?= e($estado) ?>">
                     <input type="hidden" name="p" value="<?= (int)$pagina ?>">
 
+                    <!-- Botones de moderación para Administrador y Trabajador -->
                     <?php if ($puedeRevisar && in_array($l['estado'], ['pendiente', 'rechazado'], true)): ?>
                         <button name="accion" value="aprobar" class="btn btn-sm btn-success">Aprobar</button>
                     <?php endif; ?>
@@ -181,6 +193,7 @@ require __DIR__ . '/inc/header.php';
                         <button name="accion" value="rechazar" class="btn btn-sm btn-outline-danger">Rechazar</button>
                     <?php endif; ?>
 
+                    <!-- Botones de edición y baja/reactivación para Administrador y Autor -->
                     <?php if ($puedeGestionar): ?>
                         <a class="btn btn-sm btn-outline-secondary" href="libro_form.php?id=<?= (int)$l['id_libro'] ?>">Editar</a>
                         <?php if ($l['estado'] === 'baja'): ?>
